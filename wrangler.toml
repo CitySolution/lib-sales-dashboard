@@ -1,0 +1,19 @@
+# Cloudflare Pages project for the Latest in Beauty sales dashboard.
+# Deployed by .github/workflows/deploy.yml on every push to main.
+name = "lib-sales-dashboard"
+pages_build_output_dir = "site"
+compatibility_date = "2026-07-01"
+
+# Where the figures and box costs live (written by /api/upload and /api/costs).
+# Create the namespace once (SETUP.md step 2) and put its ID here.
+[[kv_namespaces]]
+binding = "LIB_DATA"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+# Cloudflare Access login. Neither value is secret. Until both are filled in,
+# the site serves no data at all (/api/me answers 503).
+#   TEAM_DOMAIN: https://<your-team>.cloudflareaccess.com
+#   POLICY_AUD:  the Access application's "Application Audience (AUD) Tag"
+[vars]
+TEAM_DOMAIN = ""
+POLICY_AUD = ""

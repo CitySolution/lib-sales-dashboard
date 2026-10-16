@@ -1,0 +1,14 @@
+{
+  "name": "lib-sales-dashboard",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test/data.test.mjs && node test/api.test.mjs"
+  },
+  "dependencies": {
+    "jose": "^5.9.6"
+  },
+  "devDependencies": {
+    "wrangler": "^4"
+  }
+}

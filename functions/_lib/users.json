@@ -1,0 +1,6 @@
+{
+  "_help": "Admins can upload TikTok files and edit box costs. Everyone else who signs in with an @citysolution.co.uk or @latestinbeauty.com email can view. To add an admin, add their email here and push.",
+  "admins": [
+    "peter@citysolution.co.uk"
+  ]
+}

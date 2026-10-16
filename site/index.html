@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <title>LiB Sales Dashboard</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+  <header class="brandbar">
+    <div class="in">
+      <a class="wordmark" href="#summary" aria-label="Latest in Beauty - sales dashboard"><img src="/img/logo.svg" alt="Latest in Beauty" height="28"></a>
+      <span class="who muted" id="who"></span>
+    </div>
+  </header>
+
+  <main class="page">
+    <div class="hero">
+      <p class="eyebrow">Box profitability · TikTok Shop</p>
+      <h1 id="title">Sales dashboard</h1>
+      <p class="muted" id="coverage"></p>
+    </div>
+
+    <div id="status" class="status" role="status">Loading…</div>
+
+    <nav class="tabs" id="tabs" hidden aria-label="Sections">
+      <a href="#summary" data-tab="summary">Summary</a>
+      <a href="#boxes" data-tab="boxes">Boxes</a>
+      <a href="#costs" data-tab="costs">Costs</a>
+      <a href="#uploads" data-tab="uploads">Uploads</a>
+    </nav>
+
+    <section class="card filters" id="filters" hidden>
+      <label>Period
+        <select id="period">
+          <option value="mtd">This month</option>
+          <option value="lm">Last month</option>
+          <option value="qtd">Quarter to date</option>
+          <option value="lq">Last quarter</option>
+          <option value="ytd" selected>Year to date</option>
+          <option value="l12">Last 12 months</option>
+          <option value="all">All time</option>
+          <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <span id="custom" hidden><input type="date" id="from" aria-label="From"> – <input type="date" id="to" aria-label="To"></span>
+      <span class="muted" id="range"></span>
+    </section>
+
+    <!-- Summary -->
+    <section class="view" id="v-summary" hidden>
+      <div class="warn" id="uncosted" hidden></div>
+      <div class="tiles" id="tiles"></div>
+      <div class="card">
+        <div class="ctrl"><h2>Month by month</h2><span class="legend" id="legend"></span></div>
+        <div class="chart" id="chart"></div>
+      </div>
+      <div class="grid2">
+        <div class="card">
+          <h2>Boxes by net profit</h2>
+          <div class="tablewrap"><table class="t" id="top"></table></div>
+          <a href="#boxes" class="more">All boxes →</a>
+        </div>
+        <div class="card">
+          <h2>Profit and loss</h2>
+          <table class="t pl" id="pl"></table>
+          <p class="muted small">Shop-level items are TikTok charges and credits not tied to one box (e.g. FBT warehouse storage, lost-parcel reimbursements). Bill payments (topping up a negative balance) aren't income or costs and are left out.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Boxes -->
+    <section class="view" id="v-boxes" hidden>
+      <div class="card" id="box" hidden></div>
+      <div class="card">
+        <div class="ctrl"><h2>Every box</h2><input type="search" id="q" placeholder="Search box name or SKU" aria-label="Search boxes"></div>
+        <div class="tablewrap"><table class="t sortable" id="boxes"></table></div>
+        <p class="muted small">Click a box for its full profit and loss. Boxes are tracked by TikTok SKU ID, so a renamed box keeps its history.</p>
+      </div>
+    </section>
+
+    <!-- Costs -->
+    <section class="view" id="v-costs" hidden>
+      <div class="card" id="cost-edit" hidden></div>
+      <div class="card">
+        <h2>Costs per box</h2>
+        <p class="muted" id="costs-help"></p>
+        <div class="tablewrap"><table class="t" id="costs"></table></div>
+      </div>
+      <div class="card" id="cost-log-card" hidden>
+        <h2>Recent changes</h2>
+        <div class="tablewrap"><table class="t" id="cost-log"></table></div>
+      </div>
+    </section>
+
+    <!-- Uploads -->
+    <section class="view" id="v-uploads" hidden>
+      <div class="card" id="upload" hidden>
+        <h2>Add new TikTok figures</h2>
+        <ol class="steps">
+          <li>In <b>TikTok Seller Center</b> go to <b>Finance → Statements</b>.</li>
+          <li>Click <b>Export</b>, choose any date range that covers the new statements (overlapping earlier uploads is fine), and download the .xlsx file.</li>
+          <li>Choose the file(s) below, check the summary and press <b>Add to dashboard</b>. Statements already in the dashboard are skipped automatically.</li>
+        </ol>
+        <div class="ctrl left"><input type="file" id="files" accept=".xlsx" multiple><button class="btn" id="publish" disabled>Add to dashboard</button></div>
+        <div id="preview"></div>
+      </div>
+      <div class="card">
+        <h2>What's loaded</h2>
+        <div id="loaded"></div>
+        <div class="tablewrap"><table class="t" id="uploads"></table></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="tip" id="tip" role="tooltip" hidden></div>
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

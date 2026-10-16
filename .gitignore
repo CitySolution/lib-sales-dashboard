@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.dev.vars
+*.log
+# Never commit real TikTok/Shopify exports (customer orders): tests build their own.
+*.xlsx
+*.xls
+*.csv
