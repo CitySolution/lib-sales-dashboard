@@ -18,12 +18,12 @@ Actions → New repository secret, twice:
 - `CLOUDFLARE_API_TOKEN` = the token
 - `CLOUDFLARE_ACCOUNT_ID` = the account ID (Workers & Pages, right-hand panel)
 
-## 2. Create the storage (KV namespace)
+## 2. Storage (done)
 
-dash.cloudflare.com → Storage & Databases → **KV** → Create → name
-`lib-sales-dashboard-data`. Copy its **ID** into `wrangler.toml` (`id = "..."` under
-`[[kv_namespaces]]`) and push. The deploy runs the tests, creates the Pages project and
-publishes to `https://lib-sales-dashboard.pages.dev`.
+The KV namespace `lib-sales-dashboard-data` already exists and its ID is in
+`wrangler.toml`. Once step 1's secrets are set, every push to `main` runs the tests,
+creates the Pages project if needed and publishes to
+`https://lib-sales-dashboard.pages.dev`.
 
 ## 3. Put the login in front of it (Cloudflare Access)
 
@@ -41,9 +41,7 @@ other dashboards) → Access → Applications → Add an application → **Self-
 - Save, open it again and copy the **Application Audience (AUD) Tag**
 
 In `wrangler.toml` under `[vars]`, set:
-- `TEAM_DOMAIN` = `https://<team-name>.cloudflareaccess.com` (the same value as in the
-  Agent's Army dashboard's `wrangler.toml`)
-- `POLICY_AUD` = the AUD tag
+- `POLICY_AUD` = the AUD tag (`TEAM_DOMAIN` is already set to the shared Zero Trust team)
 
 Push, and the site goes live behind the login. The server also checks the email domain
 itself, so even a mistake in the Access policy can't let anyone else see data.
