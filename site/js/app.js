@@ -1,5 +1,5 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
-import { summary, byMonth, assemble, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
+import { summary, byMonth, assemble, saleDates, inRange, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 
 const $ = (id) => document.getElementById(id);
@@ -150,13 +150,14 @@ function showTip(html, e) {
 }
 const hideTip = () => { $('tip').hidden = true; };
 
+const saleCells = (sku) => { const t = state.spans.get(sku); return `<td>${t ? dmy(t.first) : '–'}</td><td>${t ? dmy(t.last) : '–'}</td>`; };
 const COLS = [
-  ['name', 'Box'], ['n', 'Boxes'], ['r', 'Refunded'], ['rev', 'Net revenue'], ['fees', 'TikTok fees'], ['cogs', 'COGS'],
+  ['name', 'Box'], ['first', 'First sale'], ['last', 'Last sale'], ['n', 'Boxes'], ['r', 'Refunded'], ['rev', 'Net revenue'], ['fees', 'TikTok fees'], ['cogs', 'COGS'],
   ['marketing', 'Marketing'], ['net', 'Net profit'], ['margin', 'Margin'], ['per', 'Per box'],
 ];
 function renderBoxes(s) {
   const q = $('q').value.trim().toLowerCase();
-  const val = (sku, b, k) => (k === 'name' ? boxName(sku).toLowerCase() : k === 'margin' ? ratio(b.net, b.rev) : k === 'per' ? profitPer(b) : b[k]);
+  const val = (sku, b, k) => (k === 'name' ? boxName(sku).toLowerCase() : k === 'first' || k === 'last' ? state.spans.get(sku)?.[k] || '' : k === 'margin' ? ratio(b.net, b.rev) : k === 'per' ? profitPer(b) : b[k]);
   const rows = [...s.boxes]
     .filter(([sku]) => !q || sku.includes(q) || (state.data.skus[sku]?.names || []).some((n) => n.toLowerCase().includes(q)))
     .sort(([ka, a], [kb, b]) => {
@@ -166,8 +167,8 @@ function renderBoxes(s) {
     });
   const head = `<thead><tr>${COLS.map(([k, l]) => `<th data-k="${k}"${sort.key === k ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${l}</th>`).join('')}</tr></thead>`;
   const body = rows.map(([sku, b]) => `<tr class="click${b.uncosted ? ' missing' : ''}${sku === selected ? ' sel' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>
-    <td>${int.format(b.n)}</td><td>${int.format(b.r)}</td>${cell(b.rev)}${cell(b.fees)}${cell(b.cogs)}${cell(b.marketing)}${cell(b.net)}<td>${pct(ratio(b.net, b.rev))}</td>${Number.isFinite(profitPer(b)) ? cell(profitPer(b), 2) : '<td>–</td>'}</tr>`).join('');
-  $('boxes').innerHTML = head + `<tbody>${body || '<tr><td colspan="10" class="muted">No boxes in this period.</td></tr>'}</tbody>`;
+    ${saleCells(sku)}<td>${int.format(b.n)}</td><td>${int.format(b.r)}</td>${cell(b.rev)}${cell(b.fees)}${cell(b.cogs)}${cell(b.marketing)}${cell(b.net)}<td>${pct(ratio(b.net, b.rev))}</td>${Number.isFinite(profitPer(b)) ? cell(profitPer(b), 2) : '<td>–</td>'}</tr>`).join('');
+  $('boxes').innerHTML = head + `<tbody>${body || '<tr><td colspan="12" class="muted">No boxes in this period.</td></tr>'}</tbody>`;
 }
 
 const FEE_LABEL = (k) => MONEY[k] || k;
@@ -224,13 +225,20 @@ function renderCosts() {
     ? 'Costs that aren\'t in TikTok\'s data, per box: £ per box sold, and commission as a % of net revenue. When a cost changes, add a new dated entry rather than changing the old one, so past months stay as they were. Click a box to edit.'
     : 'Costs that aren\'t in TikTok\'s data, per box. Only admins can change them.';
   const today = iso(ukToday());
-  const skus = Object.keys(state.data?.skus || {}).sort((a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
+  // Only boxes with a sale in the period chosen (all of them for "All time").
+  const [from, to] = range();
+  const sold = new Set((state.data?.daily || []).filter((r) => r.u && inRange(r.d, from, to)).map((r) => r.sku));
+  const skus = Object.keys(state.data?.skus || {}).filter((sku) => (!from && !to) || sold.has(sku))
+    .sort((a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
   const done = skus.filter((sku) => vals[sku]).length;
-  $('costs-count').innerHTML = `<b>${done} of ${skus.length} boxes have costs.</b> ${done < skus.length ? `The ${skus.length - done} without are listed first; the rest follow below.` : ''}`;
-  const head = `<thead><tr><th>Box</th>${COST_LINES.map((c) => `<th>${c.label}</th>`).join('')}<th>${MARKETING.label}</th><th>Since</th></tr></thead>`;
+  const which = from || to ? 'boxes sold in this period' : 'boxes';
+  $('costs-count').innerHTML = skus.length
+    ? `<b>${done} of ${skus.length} ${which} have costs.</b> ${done < skus.length ? `The ${skus.length - done} without are listed first; the rest follow below.` : ''}`
+    : `No ${which}.`;
+  const head = `<thead><tr><th>Box</th><th>First sale</th><th>Last sale</th>${COST_LINES.map((c) => `<th>${c.label}</th>`).join('')}<th>${MARKETING.label}</th><th>Since</th></tr></thead>`;
   $('costs').innerHTML = head + `<tbody>${skus.map((sku) => {
     const c = costAt(vals[sku], today);
-    return `<tr class="${state.admin ? 'click' : ''}${c ? '' : ' missing'}${sku === editing ? ' sel' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>
+    return `<tr class="${state.admin ? 'click' : ''}${c ? '' : ' missing'}${sku === editing ? ' sel' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>${saleCells(sku)}
       ${COST_KEYS.map((k) => `<td>${c ? (k === 'commission' ? pct(c[k]) : money(c[k], 2)) : '–'}</td>`).join('')}<td>${c ? dmy(c.from) : ''}</td></tr>`;
   }).join('')}</tbody>`;
   const log = (state.costs.log || []).slice(-15).reverse();
@@ -377,12 +385,13 @@ function showTab() {
   const known = ['summary', 'boxes', 'costs', 'uploads'].includes(tab) ? tab : 'summary';
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== `v-${known}`; });
   document.querySelectorAll('#tabs a').forEach((a) => (a.dataset.tab === known ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
-  $('filters').hidden = !['summary', 'boxes'].includes(known);
+  $('filters').hidden = !['summary', 'boxes', 'costs'].includes(known);
 }
 
 async function load() {
   state = await api('/api/me');
   state.data = assemble(state.index, state.batches);
+  state.spans = saleDates(state.data);
   const st = Object.values(state.data?.statements || {}).map((s) => s.date).sort();
   $('who').textContent = `${state.email}${state.admin ? ' · admin' : ''}`;
   $('coverage').textContent = st.length ? `TikTok statements loaded up to ${dmy(st[st.length - 1])}${state.data.uploaded_at ? ` · last updated ${new Date(state.data.uploaded_at).toLocaleDateString('en-GB')}` : ''}` : '';

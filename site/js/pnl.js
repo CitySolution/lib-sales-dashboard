@@ -132,6 +132,18 @@ function add(t, row, costs) {
 
 export const inRange = (d, from, to) => (!from || d >= from) && (!to || d <= to);
 
+// Each box's first and last sale (order date of a day with units sold, not refunds).
+export function saleDates(data) {
+  const out = new Map();
+  for (const r of data?.daily || []) {
+    if (!r.u) continue;
+    const t = out.get(r.sku);
+    if (!t) out.set(r.sku, { first: r.d, last: r.d });
+    else { if (r.d < t.first) t.first = r.d; if (r.d > t.last) t.last = r.d; }
+  }
+  return out;
+}
+
 // Per box for a date range: Map sku -> totals (see `blank`).
 export function byBox(data, costs, from, to) {
   const out = new Map();

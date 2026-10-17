@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { XLSX } from './xlsx.mjs';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
-import { merge, byBox, summary, byMonth, costAt } from '../site/js/pnl.js';
+import { merge, byBox, summary, byMonth, costAt, saleDates } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 
 const close = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: got ${a}, expected ${b}`);
@@ -86,6 +86,13 @@ test('summary: shop items count, bill payments do not; settlement reconciles', (
   const months = byMonth(data, costs);
   assert.deepEqual([...months.keys()], ['2026-01', '2026-02']);
   close([...months.values()].reduce((x, m) => x + m.net + m.shopTotal, 0), s.overall, 'months add up');
+});
+
+test('first and last sale per box ignore refund-only days', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  const d = saleDates(data);
+  assert.deepEqual(d.get(A), { first: '2026-01-08', last: '2026-01-09' }, 'the Feb refund of a Jan order is not a sale');
+  assert.deepEqual(d.get(B), { first: '2026-01-30', last: '2026-02-18' });
 });
 
 test('refuses an incomplete file', () => {
