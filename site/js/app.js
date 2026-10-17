@@ -108,6 +108,8 @@ function tile(label, value, sub = '', hero = false) {
   return `<div class="card tile${hero ? ' hero-tile' : ''}"><span class="lab">${label}</span><span class="big">${value}</span><span class="sub">${sub}</span></div>`;
 }
 
+// A margin line in a P&L: % of net revenue (ex VAT). `extra` pads the box P&L's third column.
+const pctRow = (label, v, extra = '') => `<tr class="pct"><td>${label}</td><td${v < 0 ? ' class="neg"' : ''}>${pct(v)}</td>${extra}</tr>`;
 function renderSummary(s, from, to) {
   const t = s.total;
   const missing = [...s.boxes].filter(([, b]) => b.uncosted).map(([sku]) => sku);
@@ -141,10 +143,13 @@ function renderSummary(s, from, to) {
     <tr><td>Other TikTok items</td>${cell(t.other)}</tr>
     <tr><td>Cost of goods</td>${cell(t.cogs)}</tr>
     <tr class="sum"><td>Gross profit</td>${cell(t.gross)}</tr>
+    ${pctRow('GP %', ratio(t.gross, t.rev))}
     <tr><td>Marketing</td>${cell(t.marketing)}</tr>
     <tr class="sum"><td>Net profit from boxes</td>${cell(t.net)}</tr>
+    ${pctRow('Net profit from boxes %', ratio(t.net, t.rev))}
     ${shop.map(([k, v]) => `<tr><td>${esc(k)}</td>${cell(v)}</tr>`).join('')}
-    <tr class="total"><td>Net profit after all costs</td>${cell(s.overall)}</tr></tbody>`;
+    <tr class="total"><td>Net profit after all costs</td>${cell(s.overall)}</tr>
+    ${pctRow('Net profit after all costs %', ratio(s.overall, t.rev))}</tbody>`;
 }
 
 // Grouped bars per month, one axis (£), with a hover tooltip per month.
@@ -253,8 +258,10 @@ function renderBox(sku, s, from, to) {
         ${COST_LINES.map(({ k, label }) => row(label, b.cogsLines[k] || 0, unit(k))).join('')}
         <tr class="sum"><td>Total COGS</td>${cell(b.cogs, 2)}<td></td></tr>
         <tr class="sum"><td>Gross profit</td>${cell(b.gross, 2)}<td></td></tr>
+        ${pctRow('GP %', ratio(b.gross, b.rev), '<td></td>')}
         ${row(MARKETING.label, b.marketing, unit('marketing'))}
         <tr class="total"><td>Net profit</td>${cell(b.net, 2)}<td></td></tr>
+        ${pctRow('Net profit %', ratio(b.net, b.rev), '<td></td>')}
       </tbody></table>
       <p class="muted small">Per-unit costs shown are those applying at the end of the period; each sale is costed at the costs applying on its order date.</p></div>
       <div><h3>Month by month</h3><div class="chart" id="box-chart"></div></div>

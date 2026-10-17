@@ -228,6 +228,9 @@ test('Excel downloads: real numbers and dates that add up', () => {
   const rows = (sheet) => XLSX.utils.sheet_to_json(back.Sheets[sheet], { header: 1, raw: true });
   const pl = new Map(rows('Profit and loss').map(([k, v]) => [k, v]));
   close(pl.get('Net profit after all costs'), s.overall, 'P&L total');
+  close(pl.get('GP %'), s.total.gross / s.total.rev, 'GP %');
+  close(pl.get('Net profit from boxes %'), s.total.net / s.total.rev, 'net from boxes %');
+  close(pl.get('Net profit after all costs %'), s.overall / s.total.rev, 'net after all costs %');
   close(pl.get('  Logistics reimbursement'), 34, 'shop item line');
   assert.equal(back.Sheets['Profit and loss'].B2.w, `£${(s.total.revInc).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`, 'shown as £');
   const boxes = rows('Boxes');

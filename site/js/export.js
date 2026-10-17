@@ -50,10 +50,10 @@ export function plSheet(t, s = null) {
     ['TikTok fees', ''], ...lines(t.feeLines, (k) => MONEY[k] || k), ['Total TikTok fees', gbp(t.fees)],
     ['Other TikTok items', ''], ...lines(t.otherLines), ['Total other TikTok items', gbp(t.other)],
     ['Cost of goods', ''], ...COST_LINES.map(({ k, label }) => [`  ${label}`, gbp(t.cogsLines[k])]), ['Total COGS', gbp(t.cogs)],
-    ['Gross profit', gbp(t.gross)],
+    ['Gross profit', gbp(t.gross)], ['GP %', pc(ratio(t.gross, t.rev))],
     [MARKETING.label, gbp(t.marketing)],
-    [s ? 'Net profit from boxes' : 'Net profit', gbp(t.net)],
-    ...(s ? [['Shop-level items', ''], ...lines(s.shop), ['Net profit after all costs', gbp(s.overall)]] : []),
+    [s ? 'Net profit from boxes' : 'Net profit', gbp(t.net)], [s ? 'Net profit from boxes %' : 'Net profit %', pc(ratio(t.net, t.rev))],
+    ...(s ? [['Shop-level items', ''], ...lines(s.shop), ['Net profit after all costs', gbp(s.overall)], ['Net profit after all costs %', pc(ratio(s.overall, t.rev))]] : []),
     [], ['Boxes sold', t.u], ['Refunded or cancelled', t.r], ['Net boxes', t.n],
   ];
 }

@@ -96,6 +96,8 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .t tr.head td { font-family: var(--serif); font-size: 16px; padding-top: 16px; border-bottom-color: var(--fg); text-align: left; }
 .t tr.sum td { font-weight: 700; }
 .t tr.total td { font-weight: 700; border-top: 2px solid var(--fg); background: var(--blush); }
+.t tr.pct td { color: var(--muted); font-size: 13px; } /* a margin % under its P&L line */
+.t tr.pct td.neg { color: var(--bad); }
 .t tr.missing td:first-child::after { content: " · no costs"; color: var(--warn-fg); font-size: 12px; }
 .sortable th { cursor: pointer; user-select: none; }
 .sortable th[aria-sort=ascending]::after { content: " ↑"; }
