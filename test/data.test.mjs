@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { XLSX } from './xlsx.mjs';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
-import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems } from '../site/js/pnl.js';
+import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems, prices } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count, withoutHidden } from '../site/js/checks.js';
 import { book, boxesSheet, periodSheet, plSheet, costHistorySheet, statementsSheet } from '../site/js/export.js';
@@ -219,6 +219,16 @@ test('reads files whose declared sheet size is wrong (as TikTok\'s are)', () => 
   const p = parseOrderDetails(readWorkbook(XLSX, XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip' })));
   assert.equal(p.rows, 7);
 });
+test('prices: list price, discount and price paid per box sold', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  // Box A: 4 sold at £84 list, £15 off each; 2 refunded, so £30 of discount stands.
+  assert.deepEqual(prices(byBox(data, costs).get(A)), { list: 84, disc: 15, pct: 15 / 84, paid: 69, given: 30 });
+  assert.equal(prices(byBox(data, costs).get(B)).paid, 44, 'no discount');
+  const s = summary(data, costs);
+  close(prices(s.total).list, (336 + 88) / 6, 'all boxes');
+  close([...byMonth(data, costs).values()].reduce((x, m) => x + prices(m).given, 0), 30, 'months add up');
+});
+
 test('Excel downloads: real numbers and dates that add up', () => {
   const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
   const s = summary(data, costs), name = (sku) => `Box ${sku}`;

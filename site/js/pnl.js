@@ -111,7 +111,7 @@ export function costAt(entries, d) {
 
 // ---- Totals ------------------------------------------------------------------------
 
-const blank = () => ({ u: 0, r: 0, f: 0, n: 0, revInc: 0, rev: 0, vat: 0, fees: 0, feeLines: {}, other: 0, otherLines: {}, cogs: 0, cogsLines: {}, gross: 0, marketing: 0, net: 0, settlement: 0, uncosted: 0 });
+const blank = () => ({ u: 0, r: 0, f: 0, n: 0, gs: 0, sd: 0, sdr: 0, revInc: 0, rev: 0, vat: 0, fees: 0, feeLines: {}, other: 0, otherLines: {}, cogs: 0, cogsLines: {}, gross: 0, marketing: 0, net: 0, settlement: 0, uncosted: 0 });
 
 // The FBT warehouse fee per box sold, per month: { 'YYYY-MM': £ per box } (negative).
 // Months with fees but no boxes sold keep their fee at shop level.
@@ -143,9 +143,18 @@ function add(t, row, costs, rates) {
     marketing = -n * (c.marketing || 0);
   } else if (n || revInc) t.uncosted += n;
   t.u += row.u || 0; t.r += row.r || 0; t.f += row.f || 0; t.n += n;
+  t.gs += row.gs || 0; t.sd += row.sd || 0; t.sdr += row.sdr || 0;
   t.revInc += revInc; t.rev += rev; t.vat += revInc - rev; t.fees += fees; t.other += other; t.settlement += revInc + fees + other;
   t.cogs += cogs; t.gross += rev + fees + other + cogs; t.marketing += marketing; t.net += rev + fees + other + cogs + marketing;
 }
+
+// Prices and LiB's own discounts, incl. VAT as customers see them, per box sold (cancelled
+// and refunded ones included, as their sale was). Discounts TikTok funds itself aren't in
+// its export. `given` is the discounts net of those refunded.
+const per = (a, b) => (b ? a / b : NaN);
+export const prices = (t) => ({
+  list: per(t.gs, t.u), disc: per(-t.sd, t.u), pct: per(-t.sd, t.gs), paid: per(t.gs + t.sd, t.u), given: -(t.sd + t.sdr),
+});
 
 export const inRange = (d, from, to) => (!from || d >= from) && (!to || d <= to);
 
@@ -186,7 +195,7 @@ export function summary(data, costs, from, to) {
   const boxes = byBox(data, costs, from, to);
   const t = blank();
   for (const b of boxes.values()) {
-    for (const k of ['u', 'r', 'f', 'n', 'revInc', 'rev', 'vat', 'fees', 'other', 'cogs', 'gross', 'marketing', 'net', 'settlement', 'uncosted']) t[k] += b[k];
+    for (const k of ['u', 'r', 'f', 'n', 'gs', 'sd', 'sdr', 'revInc', 'rev', 'vat', 'fees', 'other', 'cogs', 'gross', 'marketing', 'net', 'settlement', 'uncosted']) t[k] += b[k];
     for (const [k, v] of Object.entries(b.feeLines)) t.feeLines[k] = (t.feeLines[k] || 0) + v;
     for (const [k, v] of Object.entries(b.otherLines)) t.otherLines[k] = (t.otherLines[k] || 0) + v;
     for (const [k, v] of Object.entries(b.cogsLines)) t.cogsLines[k] = (t.cogsLines[k] || 0) + v;

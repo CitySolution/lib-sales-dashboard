@@ -1,7 +1,7 @@
 // Excel downloads: each card's figures as sheets of real numbers and dates (not the
 // rounded text on screen), so they can be explored further. Shared with the tests.
 import { MONEY } from './tiktok.js';
-import { COST_LINES, MARKETING, costAt } from './pnl.js';
+import { COST_LINES, MARKETING, costAt, prices } from './pnl.js';
 
 const MONEY_Z = '"£"#,##0.00;-"£"#,##0.00';
 const serial = (ms) => ms / 864e5 + 25569; // Excel's day number
@@ -57,6 +57,14 @@ export function plSheet(t, s = null) {
     [], ['Boxes sold', t.u], ['Refunded or cancelled', t.r], ['Net boxes', t.n],
   ];
 }
+
+// Prices and discounts per month (or day) from byMonth(), or per box from byBox().
+const PRICES = ['Sold', 'List price', 'Discount per box', 'Discount %', 'Price paid', 'Discounts given', 'Net revenue per box', 'Profit per box'];
+const priceCells = (t) => { const p = prices(t); return [t.u, gbp(p.list), gbp(p.disc), pc(p.pct), gbp(p.paid), gbp(p.given), t.n ? gbp(t.rev / t.n) : '', t.n ? gbp(t.net / t.n) : '']; };
+export const pricePeriodSheet = (periods) => [[[...periods.keys()][0]?.length === 10 ? 'Day' : 'Month', ...PRICES],
+  ...[...periods].map(([k, t]) => [k.length === 10 ? day(k) : month(k), ...priceCells(t)])];
+export const priceBoxSheet = (boxes, name) => [['Box', 'SKU', ...PRICES],
+  ...[...boxes].filter(([, b]) => b.u).sort(([, a], [, b]) => prices(b).pct - prices(a).pct).map(([sku, b]) => [name(sku), sku, ...priceCells(b)])];
 
 const costRow = (c) => [...COST_LINES, MARKETING].map(({ k, pct }) => (c ? (pct ? pc(c[k] || 0, '0.00%') : gbp(c[k])) : ''));
 const costHead = [...COST_LINES, MARKETING].map((c) => c.label);

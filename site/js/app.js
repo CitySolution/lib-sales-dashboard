@@ -1,8 +1,8 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
-import { summary, byMonth, assemble, saleDates, inRange, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
+import { summary, byMonth, assemble, saleDates, inRange, prices, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 import { attention, withoutHidden, count as attCount, LIMITS, GROUPS } from './checks.js';
-import { book, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet } from './export.js';
+import { book, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet, pricePeriodSheet, priceBoxSheet } from './export.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -98,6 +98,7 @@ function render() {
   const s = summary(state.data, state.costs.values, from, to);
   renderSummary(s, from, to);
   renderBoxes(s);
+  renderPrices(s, from, to);
   if (selected) renderBox(selected, s, from, to);
   renderCosts();
   renderAttention(from, to);
@@ -220,6 +221,29 @@ function renderBoxes(s) {
   $('boxes').innerHTML = head + `<tbody>${body || '<tr><td colspan="13" class="muted">No boxes in this period.</td></tr>'}</tbody>`;
 }
 
+// ---- Prices ------------------------------------------------------------------------
+const PRICE_HEAD = ['Sold', 'List price', 'Discount', 'Discount %', 'Price paid', 'Discounts given', 'Profit per box'];
+const cell2 = (v) => (Number.isFinite(v) ? cell(v, 2) : '<td>–</td>');
+const priceCells = (t) => { const p = prices(t); return `<td>${int.format(t.u)}</td>${cell2(p.list)}${cell2(p.disc)}<td>${pct(p.pct)}</td>${cell2(p.paid)}${cell(p.given)}${cell2(profitPer(t))}`; };
+const priceMonths = (months) => `<thead><tr><th>Month</th>${PRICE_HEAD.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${[...months].filter(([, t]) => t.u)
+  .map(([m, t]) => `<tr><td data-v="${m}">${monthName(m)}</td>${priceCells(t)}</tr>`).join('') || '<tr><td colspan="8" class="muted">No sales in this period.</td></tr>'}</tbody>`;
+function renderPrices(s, from, to) {
+  const t = s.total, p = prices(t);
+  const m2 = (v) => (Number.isFinite(v) ? money(v, 2) : '–');
+  $('price-tiles').innerHTML = [
+    tile('Average discount', m2(p.disc), `${pct(p.pct)} off the list price`, true),
+    tile('Average list price', m2(p.list), 'incl. VAT, per box sold'),
+    tile('Average price paid', m2(p.paid), `${m2(p.paid / 1.2)} ex VAT`),
+    tile('Discounts given', money(p.given), 'net of refunds'),
+  ].join('');
+  $('price-months').innerHTML = priceMonths(byMonth(state.data, state.costs.values, from, to));
+  sortTable('price-months');
+  const rows = [...s.boxes].filter(([, b]) => b.u).sort(([, a], [, b]) => (prices(b).pct || 0) - (prices(a).pct || 0));
+  $('price-boxes').innerHTML = `<thead><tr><th>Box</th>${PRICE_HEAD.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows
+    .map(([sku, b]) => `<tr class="click${b.uncosted ? ' missing' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>${priceCells(b)}</tr>`).join('') || '<tr><td colspan="8" class="muted">No sales in this period.</td></tr>'}</tbody>`;
+  sortTable('price-boxes');
+}
+
 const FEE_LABEL = (k) => MONEY[k] || k;
 function renderBox(sku, s, from, to) {
   const b = s.boxes.get(sku);
@@ -265,7 +289,10 @@ function renderBox(sku, s, from, to) {
       </tbody></table>
       <p class="muted small">Per-unit costs shown are those applying at the end of the period; each sale is costed at the costs applying on its order date.</p></div>
       <div><h3>Month by month</h3><div class="chart" id="box-chart"></div></div>
-    </div>`;
+    </div>
+    <h3>Price and discounts</h3>
+    <div class="tablewrap"><table class="t" id="box-prices"></table></div>`;
+  $('box-prices').innerHTML = priceMonths(byMonth(state.data, state.costs.values, from, to, sku));
   const months = byMonth(state.data, state.costs.values, from, to, sku);
   chart($('box-chart'), [...months].map(([m, v]) => ({ label: monthName(m), a: v.rev, b: v.net, tip: `<b>${monthName(m)}</b>Net revenue ${money(v.rev)}<br>Net profit ${money(v.net)}<br>Boxes ${int.format(v.n)}` })));
   $('box-close').onclick = () => { selected = null; el.hidden = true; render(); };
@@ -509,7 +536,9 @@ async function download(key) {
     chart: () => ['Month by month', [months()]],
     top: () => ['Boxes', [boxes()]],
     boxes: () => ['Boxes', [boxes()]],
-    box: () => [boxName(selected), [['Profit and loss', plSheet(s.boxes.get(selected))], months(selected), ['By day', periodSheet(byMonth(D, C, from, to, selected, 10))]]],
+    box: () => [boxName(selected), [['Profit and loss', plSheet(s.boxes.get(selected))], months(selected), ['By day', periodSheet(byMonth(D, C, from, to, selected, 10))], ['Prices by month', pricePeriodSheet(byMonth(D, C, from, to, selected))]]],
+    'price-months': () => ['Prices by month', [['Prices by month', pricePeriodSheet(byMonth(D, C, from, to))]]],
+    'price-boxes': () => ['Prices by box', [['Prices by box', priceBoxSheet(s.boxes, boxName)]]],
     costs: () => ['Costs', [['Costs now', costsSheet(costSkus, boxName, state.spans, C, today)], ['Cost history', costHistorySheet(C, boxName)], ['Changes', costLogSheet(state.costs.log || [], boxName)]], false],
     'cost-log': () => ['Cost changes', [['Changes', costLogSheet(state.costs.log || [], boxName)]], false],
     'att-data': () => ['Data checks', [['Data checks', attDataSheet(att().data, boxName)]], false],
@@ -531,10 +560,10 @@ async function download(key) {
 // ---- Wiring ------------------------------------------------------------------------
 function showTab() {
   const tab = (location.hash || '#summary').slice(1);
-  const known = ['summary', 'attention', 'boxes', 'costs', 'uploads'].includes(tab) ? tab : 'summary';
+  const known = ['summary', 'attention', 'boxes', 'prices', 'costs', 'uploads'].includes(tab) ? tab : 'summary';
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== `v-${known}`; });
   document.querySelectorAll('#tabs a').forEach((a) => (a.dataset.tab === known ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
-  $('filters').hidden = !['summary', 'attention', 'boxes', 'costs'].includes(known);
+  $('filters').hidden = !['summary', 'attention', 'boxes', 'prices', 'costs'].includes(known);
 }
 
 async function load() {
@@ -579,6 +608,7 @@ async function start() {
   const openBox = (sku) => { selected = sku; location.hash = '#boxes'; render(); $('box').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   onRowClick('boxes', openBox);
   onRowClick('top', openBox);
+  onRowClick('price-boxes', openBox);
   const openCosts = (sku) => { if (!state.admin) return openBox(sku); editing = sku; location.hash = '#costs'; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   onRowClick('att-costs', openCosts);
   for (const id of ['att-loss', 'att-margin', 'att-refunds', 'att-data-list']) onRowClick(id, openBox);
@@ -596,7 +626,7 @@ async function start() {
     const btn = e.target.closest('button[data-show]');
     if (btn) dismiss({ key: btn.dataset.show, show: true });
   });
-  sortable('top', 10); sortable('uploads'); sortable('cost-log');
+  sortable('top', 10); sortable('uploads'); sortable('cost-log'); sortable('price-months'); sortable('price-boxes');
   onRowClick('costs', (sku) => { if (!state.admin) return; editing = sku; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
   $('publish').addEventListener('click', publish);

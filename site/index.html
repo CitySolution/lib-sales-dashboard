@@ -29,6 +29,7 @@
       <a href="#summary" data-tab="summary">Summary</a>
       <a href="#attention" data-tab="attention">Attention <span class="badge" id="att-badge" hidden></span></a>
       <a href="#boxes" data-tab="boxes">Boxes</a>
+      <a href="#prices" data-tab="prices">Prices</a>
       <a href="#costs" data-tab="costs">Costs</a>
       <a href="#uploads" data-tab="uploads">Uploads</a>
     </nav>
@@ -116,6 +117,21 @@
         <div class="tablewrap"><table class="t sortable" id="boxes"></table></div>
         <p class="muted small">Click a box for its full profit and loss. Boxes are tracked by TikTok SKU ID, so a renamed box keeps its history.</p>
       </div>
+    </section>
+
+    <!-- Prices: list prices and LiB's own discounts -->
+    <section class="view" id="v-prices" hidden>
+      <div class="tiles" id="price-tiles"></div>
+      <div class="card">
+        <div class="ctrl"><h2>Month by month</h2><button class="btn ghost xl" data-xlsx="price-months">Excel</button></div>
+        <div class="tablewrap"><table class="t" id="price-months"></table></div>
+      </div>
+      <div class="card">
+        <div class="ctrl"><h2>By box</h2><button class="btn ghost xl" data-xlsx="price-boxes">Excel</button></div>
+        <p class="muted small">Biggest discount first; tap a heading to sort, or a box for its full profit and loss.</p>
+        <div class="tablewrap"><table class="t" id="price-boxes"></table></div>
+      </div>
+      <p class="muted small">Prices include VAT, as customers see them, averaged over boxes sold (including any later refunded or cancelled). Discounts are LiB's own (TikTok's "seller discount"); discounts TikTok funds itself aren't in its export, and co-funded promotions are under TikTok fees. Discounts given are net of those refunded.</p>
     </section>
 
     <!-- Costs -->
