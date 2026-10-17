@@ -26,6 +26,7 @@ export const COST_LINES = [
   { k: 'labour', label: 'Fulfilment labour' },
   { k: 'other', label: 'Other COGS' },
   { k: 'commission', label: 'Commission', pct: true },
+  { k: 'commissionUnit', label: 'Commission per box' },
 ];
 export const MARKETING = { k: 'marketing', label: 'Marketing spend' };
 export const COST_KEYS = [...COST_LINES.map((c) => c.k), MARKETING.k];

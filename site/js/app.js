@@ -221,7 +221,7 @@ let editing = null;
 function renderCosts() {
   const vals = state.costs.values;
   $('costs-help').textContent = state.admin
-    ? 'Costs that aren\'t in TikTok\'s data, per box: £ per box sold, and commission as a % of net revenue. When a cost changes, add a new dated entry rather than changing the old one, so past months stay as they were. Click a box to edit.'
+    ? 'Costs that aren\'t in TikTok\'s data, per box: £ per box sold, and commission either as a % of net revenue or as £ per box. When a cost changes, add a new dated entry rather than changing the old one, so past months stay as they were. Click a box to edit.'
     : 'Costs that aren\'t in TikTok\'s data, per box. Only admins can change them.';
   const today = iso(ukToday());
   const skus = Object.keys(state.data?.skus || {}).sort((a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
@@ -251,7 +251,7 @@ function renderCostEdit(sku) {
       <div class="costform"><div class="tablewrap"><table class="t"><thead><tr><th>Applies from</th>${lines.map((c) => `<th>${c.label} ${c.pct ? '(%)' : '(£)'}</th>`).join('')}<th></th></tr></thead><tbody>
       ${entries.map((e, i) => `<tr><td><input type="date" data-i="${i}" data-k="from" value="${e.from}" aria-label="Applies from"></td>${lines.map((c) => `<td>${input(i, c.k, e[c.k] || 0)}</td>`).join('')}<td>${entries.length > 1 ? `<button class="btn ghost" data-del="${i}">Remove</button>` : ''}</td></tr>`).join('')}
       </tbody></table></div>
-      <p class="muted small">The earliest entry also covers any sales before its date. Costs are per box sold (net of refunds); commission is a % of net revenue ex VAT.</p>
+      <p class="muted small">The earliest entry also covers any sales before its date. Costs are per box sold (net of refunds); commission is a % of net revenue ex VAT, and/or £ per box.</p>
       <div class="ctrl left"><button class="btn ghost" id="ce-add">Add a cost change</button><button class="btn" id="ce-save">Save</button><span id="ce-msg" class="muted"></span></div></div>`;
     el.querySelectorAll('input').forEach((inp) => inp.addEventListener('change', () => {
       const e = entries[inp.dataset.i], k = inp.dataset.k;
@@ -276,7 +276,7 @@ function renderCostEdit(sku) {
 function renderUploads() {
   const d = state.data;
   $('upload').hidden = !state.admin;
-  $('seed').hidden = !state.seed_pending;
+  $('seed').hidden = !state.seed_pending && !state.seed_costs;
   const st = Object.values(d?.statements || {});
   const dates = st.map((s) => s.date).sort();
   $('loaded').innerHTML = st.length
@@ -354,13 +354,15 @@ async function loadSeed() {
   $('seed-btn').disabled = true;
   try {
     let added = 0;
-    for (let part = 0, parts = 1; part < parts; part++) {
+    for (let part = 0, parts = state.seed_pending ? 1 : 0; part < parts; part++) {
       setStatus(`Loading the initial figures… file ${part + 1}`);
       const r = await api('/api/seed', { part });
       parts = r.parts; added += r.added;
     }
+    setStatus('Loading box costs from the original spreadsheet…');
+    const { costs } = await api('/api/seed', { costs: true });
     await load();
-    setStatus(`Loaded ${added} TikTok statements. Next: enter each box's costs on the Costs tab.`);
+    setStatus(`Loaded ${added ? `${added} TikTok statements and ` : ''}costs for ${costs} boxes. Boxes still marked "no costs" need theirs entered on the Costs tab.`);
   } catch (err) {
     setStatus(err.message, true);
     $('seed-btn').disabled = false;

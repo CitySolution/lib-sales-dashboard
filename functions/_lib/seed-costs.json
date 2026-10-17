@@ -1,0 +1,301 @@
+{
+ "1729682669076650386": [
+  {
+   "from": "2025-01-01",
+   "brand": 2.4,
+   "pallet": 0.35,
+   "packaging": 2.0,
+   "labour": 4.5,
+   "other": 2.0,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729644124821952914": [
+  {
+   "from": "2025-01-01",
+   "brand": 2.4,
+   "pallet": 0.35,
+   "packaging": 2.0,
+   "labour": 4.5,
+   "other": 2.0,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729636712973244818": [
+  {
+   "from": "2025-01-01",
+   "brand": 2.4,
+   "pallet": 0.35,
+   "packaging": 2.0,
+   "labour": 4.5,
+   "other": 2.0,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729670606579014034": [
+  {
+   "from": "2025-01-01",
+   "brand": 2.4,
+   "pallet": 0.35,
+   "packaging": 2.0,
+   "labour": 4.5,
+   "other": 2.0,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729664212776884626": [
+  {
+   "from": "2025-01-01",
+   "brand": 2.4,
+   "pallet": 0.35,
+   "packaging": 2.0,
+   "labour": 4.5,
+   "other": 2.0,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729679882440841618": [
+  {
+   "from": "2025-01-01",
+   "brand": 2.4,
+   "pallet": 0.35,
+   "packaging": 2.0,
+   "labour": 4.5,
+   "other": 2.0,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 5.0
+  }
+ ],
+ "1729711639615609234": [
+  {
+   "from": "2025-01-01",
+   "brand": 8.2,
+   "pallet": 0.35,
+   "packaging": 1.92,
+   "labour": 2.63,
+   "other": 1.35,
+   "commission": 0,
+   "commissionUnit": 5.35,
+   "marketing": 0.35
+  }
+ ],
+ "1729747767562181010": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.65,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 0.72,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 1.0
+  }
+ ],
+ "1729756343568406930": [
+  {
+   "from": "2025-01-01",
+   "brand": 7.93,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 0.71,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729762944948607378": [
+  {
+   "from": "2025-01-01",
+   "brand": 5.45,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 0.72,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729768362942372242": [
+  {
+   "from": "2025-01-01",
+   "brand": 8.4,
+   "pallet": 0,
+   "packaging": 1.1,
+   "labour": 2.63,
+   "other": 1.38,
+   "commission": 0.0,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729778101375179154": [
+  {
+   "from": "2025-01-01",
+   "brand": 7.58,
+   "pallet": 0,
+   "packaging": 1.92,
+   "labour": 2.65,
+   "other": 0.72,
+   "commission": 0.0,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729778126616762770": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.3,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 0.72,
+   "commission": 0.0,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729793485425908114": [
+  {
+   "from": "2025-01-01",
+   "brand": 7.09,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.64,
+   "other": 1.48,
+   "commission": 0,
+   "commissionUnit": 3.21,
+   "marketing": 0
+  }
+ ],
+ "1729797841585281426": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.28,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 0.72,
+   "commission": 0.15,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729808336186743186": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.61,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 1.17,
+   "commission": 0,
+   "commissionUnit": 5.45,
+   "marketing": 0
+  }
+ ],
+ "1729839194263755154": [
+  {
+   "from": "2025-01-01",
+   "brand": 10.77,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 1.72,
+   "commission": 0.0,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729840974253562258": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.46,
+   "pallet": 0.35,
+   "packaging": 1.92,
+   "labour": 2.2,
+   "other": 0.64,
+   "commission": 0,
+   "commissionUnit": 2.48,
+   "marketing": 0
+  }
+ ],
+ "1729827864140749202": [
+  {
+   "from": "2025-01-01",
+   "brand": 9.72,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 1.12,
+   "commission": 0,
+   "commissionUnit": 4.83,
+   "marketing": 0
+  }
+ ],
+ "1729842715892095378": [
+  {
+   "from": "2025-01-01",
+   "brand": 7.38,
+   "pallet": 0,
+   "packaging": 1.62,
+   "labour": 2.63,
+   "other": 0.78,
+   "commission": 0.0,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729863929063643538": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.75,
+   "pallet": 0,
+   "packaging": 1.72,
+   "labour": 2.4,
+   "other": 0.7,
+   "commission": 0.0,
+   "commissionUnit": 0,
+   "marketing": 0
+  }
+ ],
+ "1729859790917245330": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.72,
+   "pallet": 0,
+   "packaging": 1.92,
+   "labour": 2.63,
+   "other": 1.36,
+   "commission": 0,
+   "commissionUnit": 5.92,
+   "marketing": 0
+  }
+ ],
+ "1729859799685372306": [
+  {
+   "from": "2025-01-01",
+   "brand": 6.85,
+   "pallet": 0,
+   "packaging": 2.0,
+   "labour": 2.65,
+   "other": 0.78,
+   "commission": 0,
+   "commissionUnit": 3.38,
+   "marketing": 0
+  }
+ ]
+}

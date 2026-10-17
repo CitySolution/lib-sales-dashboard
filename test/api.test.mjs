@@ -10,6 +10,7 @@ import { onRequestPost as upload } from '../functions/api/upload.js';
 import { onRequestPost as costsPost } from '../functions/api/costs.js';
 import { onRequestPost as seedPost } from '../functions/api/seed.js';
 import seed from '../functions/_lib/seed.json' with { type: 'json' };
+import seedCosts from '../functions/_lib/seed-costs.json' with { type: 'json' };
 import { assemble, merge } from '../site/js/pnl.js';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 import { workbook, file1, file2, A } from './fixture.mjs';
@@ -135,5 +136,24 @@ await test('initial load: admins only, each part once, adds up to the statements
   assert.equal(after.seed_pending, 0);
   const d = assemble(after.index, after.batches);
   if (seed.length) assert.equal(Object.keys(d.statements).length, want.size);
+});
+await test('cost import: admins only, fills only boxes with no costs, never overwrites', async () => {
+  store.clear();
+  const skus = Object.keys(seedCosts);
+  assert.equal((await call(seedPost, '/api/seed', viewer, { body: { costs: true } })).status, 403);
+  // One box already has costs entered by hand: it must be left alone.
+  const mine = [{ from: '2026-03-01', brand: 1, pallet: 0, packaging: 0, labour: 0, other: 0, commission: 0, commissionUnit: 0, marketing: 0 }];
+  if (skus.length) assert.equal((await call(costsPost, '/api/costs', admin, { body: { sku: skus[0], entries: mine } })).status, 200);
+  assert.equal((await call(me, '/api/me', admin)).body.seed_costs, Math.max(0, skus.length - 1));
+  assert.equal((await call(me, '/api/me', viewer)).body.seed_costs, 0);
+  const r = await call(seedPost, '/api/seed', admin, { body: { costs: true } });
+  assert.equal(r.body.costs, Math.max(0, skus.length - 1));
+  assert.equal((await call(seedPost, '/api/seed', admin, { body: { costs: true } })).body.costs, 0, 'second load adds nothing');
+  const c = (await call(me, '/api/me', admin)).body;
+  assert.equal(c.seed_costs, 0);
+  if (skus.length) {
+    assert.deepEqual(c.costs.values[skus[0]], mine);
+    for (const sku of skus.slice(1)) assert.deepEqual(c.costs.values[sku], seedCosts[sku]);
+  }
 });
 console.log(`${n} API tests passed`);

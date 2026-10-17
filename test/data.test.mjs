@@ -88,6 +88,15 @@ test('summary: shop items count, bill payments do not; settlement reconciles', (
   close([...months.values()].reduce((x, m) => x + m.net + m.shopTotal, 0), s.overall, 'months add up');
 });
 
+test('commission per box is charged on net boxes, alongside commission %', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  const c = { [A]: [{ from: '2026-01-01', commission: 0.1, commissionUnit: 2 }] };
+  const a = byBox(data, c).get(A);
+  close(a.cogsLines.commissionUnit, -2 * 2, '2 net boxes x £2');
+  close(a.cogsLines.commission, -0.1 * a.rev, '10% of net revenue');
+  close(a.cogs, -4 - 0.1 * a.rev, 'total');
+});
+
 test('refuses an incomplete file', () => {
   assert.throws(() => parse(file1(), { 7001: 999 }), /looks incomplete/);
 });

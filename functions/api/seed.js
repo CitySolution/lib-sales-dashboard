@@ -1,17 +1,39 @@
-// POST /api/seed { part } - admins only. One-off load of the TikTok income exports
-// supplied when the dashboard was built (1 Jan - 11 Oct 2026, four files), parsed
-// with site/js/tiktok.js and bundled in functions/_lib/seed.json. Each part is one
-// file and goes through the same "only new statements" storing as an upload, so
-// loading twice changes nothing. Delete seed.json once loaded; this then does nothing.
+// POST /api/seed { part } or { costs: true } - admins only. One-off loads of what was
+// supplied when the dashboard was built:
+//   seed.json        the TikTok income exports (1 Jan - 11 Oct 2026, four files), parsed
+//                    with site/js/tiktok.js. Each part is one file and goes through the
+//                    same "only new statements" storing as an upload.
+//   seed-costs.json  box costs from the original Finance Dashboard spreadsheet. Only
+//                    boxes with no costs yet are filled in; nothing is overwritten.
+// Loading twice changes nothing. Once loaded, set both files to [] / {}.
 import { adminJson, json, fail, HttpError } from '../_lib/auth.js';
 import { addBatch } from '../_lib/store.js';
 import seed from '../_lib/seed.json' with { type: 'json' };
+import seedCosts from '../_lib/seed-costs.json' with { type: 'json' };
+import { sanitiseEntries } from './costs.js';
 
 export const seedPending = (index) => seed.filter((p) => Object.keys(p.statements).some((id) => !index?.statements?.[id])).length;
+export const seedCostsPending = (costs) => Object.keys(seedCosts).filter((sku) => !costs?.values?.[sku]).length;
+
+async function loadCosts(env, who) {
+  const cur = (await env.LIB_DATA.get('costs', 'json')) || { values: {}, log: [] };
+  const at = new Date().toISOString();
+  let added = 0;
+  for (const [sku, entries] of Object.entries(seedCosts)) {
+    if (cur.values[sku]) continue;
+    cur.values[sku] = sanitiseEntries(entries);
+    cur.log = [...(cur.log || []), { at, by: `${who.email} (from the original spreadsheet)`, sku, entries: cur.values[sku] }];
+    added++;
+  }
+  cur.log = cur.log.slice(-500);
+  if (added) await env.LIB_DATA.put('costs', JSON.stringify(cur));
+  return added;
+}
 
 export async function onRequestPost({ request, env }) {
   try {
     const { who, body } = await adminJson(request, env, 1000);
+    if (body?.costs === true) return json({ ok: true, costs: await loadCosts(env, who) });
     const part = seed[body?.part];
     if (!Number.isInteger(body?.part) || !part) throw new HttpError(400, 'No such part.');
     const { file, ...incoming } = part;

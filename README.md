@@ -56,7 +56,7 @@ loaded, which matches TikTok's statements.
 | `functions/_lib/users.json` | Admins (can upload and edit costs). Everyone else on the two domains can view. |
 | `functions/api/me.js` | The figures and costs, for anyone signed in. |
 | `functions/api/upload.js`, `functions/_lib/store.js` | Admins only. Stores the statements not already stored as a new batch in KV; the browser adds the batches together (`assemble()` in `pnl.js`), so the server's work per upload stays small enough for Cloudflare's free plan. |
-| `functions/api/seed.js`, `functions/_lib/seed.json` | One-off: the TikTok exports supplied when the dashboard was built (1 Jan – 11 Oct 2026), loaded with the button on the Uploads tab. Empty `seed.json` (to `[]`) once loaded. |
+| `functions/api/seed.js`, `functions/_lib/seed.json`, `seed-costs.json` | One-off: the TikTok exports supplied when the dashboard was built (1 Jan – 11 Oct 2026) and the box costs from the original Finance Dashboard spreadsheet, loaded with the button on the Uploads tab (costs only for boxes with none yet). Empty both files (`[]` / `{}`) once loaded. |
 | `functions/api/costs.js` | Admins only. Sets one box's dated costs; every change is logged. |
 | `reference/reference.py` | The sums in Python straight from the Excel files, as an independent check. |
 | `test/` | `data.test.mjs` (reader and P&L against hand-worked figures), `api.test.mjs` (sign-in, domains, admin-only changes, no double counting). Both run before every deploy. |
