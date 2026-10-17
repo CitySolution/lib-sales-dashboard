@@ -8,6 +8,10 @@ sign in. Setup: **[SETUP.md](SETUP.md)**.
 - **Summary** — the headline for any period: net profit after all costs, net revenue
   (ex VAT), boxes sold, profit per box, TikTok fees, cost of goods, month by month,
   the best boxes, and a profit and loss.
+- **Attention** — what looks like it needs looking at, with a count on the tab: upload
+  overdue (latest statement over 7 days old), gaps in the statements, refunds whose sales
+  aren't loaded, and for the period chosen: boxes with no costs (biggest first), losing
+  money, margin under 10%, or 10%+ refunded (20+ sold). Limits are in `site/js/checks.js`.
 - **Boxes** — every box with its full profit and loss (the same lines as the original
   spreadsheet), tracked by **TikTok SKU ID**, so a renamed box keeps its history.
 - **Costs** — the costs TikTok doesn't know about, per box: brand contributions,

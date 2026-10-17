@@ -27,6 +27,7 @@
 
     <nav class="tabs" id="tabs" hidden aria-label="Sections">
       <a href="#summary" data-tab="summary">Summary</a>
+      <a href="#attention" data-tab="attention">Attention <span class="badge" id="att-badge" hidden></span></a>
       <a href="#boxes" data-tab="boxes">Boxes</a>
       <a href="#costs" data-tab="costs">Costs</a>
       <a href="#uploads" data-tab="uploads">Uploads</a>
@@ -69,6 +70,36 @@
           <table class="t pl" id="pl"></table>
           <p class="muted small">Shop-level items are TikTok charges and credits not tied to one box (e.g. FBT warehouse storage, lost-parcel reimbursements). Bill payments (topping up a negative balance) aren't income or costs and are left out.</p>
         </div>
+      </div>
+    </section>
+
+    <!-- Attention: anything that looks like it needs looking at (site/js/checks.js) -->
+    <section class="view" id="v-attention" hidden>
+      <div class="card" id="att-none" hidden><h2>Nothing needs attention</h2><p class="muted">No problems found in the data, or in the boxes sold in this period.</p></div>
+      <div class="card" id="att-data" hidden>
+        <h2>Data</h2>
+        <p class="muted small">Checked across everything loaded, whatever the period.</p>
+        <div id="att-data-list" class="attlist"></div>
+      </div>
+      <div class="card" id="att-costs-card" hidden>
+        <h2>No costs entered</h2>
+        <p class="muted small">Their profit is overstated until costs are entered. Biggest sellers first; tap one to enter its costs.</p>
+        <div class="tablewrap"><table class="t" id="att-costs"></table></div>
+      </div>
+      <div class="card" id="att-loss-card" hidden>
+        <h2>Losing money</h2>
+        <p class="muted small">Net profit below zero in this period, after TikTok fees and costs.</p>
+        <div class="tablewrap"><table class="t" id="att-loss"></table></div>
+      </div>
+      <div class="card" id="att-margin-card" hidden>
+        <h2>Low margin</h2>
+        <p class="muted small" id="att-margin-help"></p>
+        <div class="tablewrap"><table class="t" id="att-margin"></table></div>
+      </div>
+      <div class="card" id="att-refunds-card" hidden>
+        <h2>High refunds</h2>
+        <p class="muted small" id="att-refunds-help"></p>
+        <div class="tablewrap"><table class="t" id="att-refunds"></table></div>
       </div>
     </section>
 

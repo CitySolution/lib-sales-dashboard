@@ -5,6 +5,7 @@ import { XLSX } from './xlsx.mjs';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 import { merge, byBox, summary, byMonth, costAt, saleDates } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
+import { attention, count } from '../site/js/checks.js';
 
 const close = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: got ${a}, expected ${b}`);
 const parse = (rows, st) => parseOrderDetails(readWorkbook(XLSX, workbook(rows, st)));
@@ -93,6 +94,42 @@ test('first and last sale per box ignore refund-only days', () => {
   const d = saleDates(data);
   assert.deepEqual(d.get(A), { first: '2026-01-08', last: '2026-01-09' }, 'the Feb refund of a Jan order is not a sale');
   assert.deepEqual(d.get(B), { first: '2026-01-30', last: '2026-02-18' });
+});
+
+test('attention: overdue upload, missing statements, refunds without sales', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  // Statements on 10 Jan, 3 Feb and 20 Feb: gaps of 24 and 17 days.
+  const a = attention(data, {}, null, null, '2026-03-10');
+  assert.deepEqual(a.data.map((d) => d.kind), ['stale', 'gap', 'gap']);
+  assert.equal(attention(data, {}, null, null, '2026-02-25').data.filter((d) => d.kind === 'stale').length, 0, '5 days old is fine');
+  // A refund of a sale that isn't loaded: only the refund statement.
+  const refundOnly = merge(null, parse([file2()[3]])).data;
+  const r = attention(refundOnly, {}, null, null, '2026-02-21').data.find((d) => d.kind === 'refunds-only');
+  assert.equal(r.sku, A); assert.equal(r.n, -1);
+});
+
+test('attention: boxes with no costs, losing money, low margin, high refunds', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  // Box A: 4 sold, 2 refunded (50%) - but fewer than 20 sold, so not flagged for refunds.
+  let a = attention(data, {}, null, null, '2026-02-21');
+  assert.deepEqual(a.boxes.costs.map((x) => x.sku).sort(), [A, B].sort(), 'no costs entered');
+  assert.equal(a.boxes.refunds.length, 0);
+  assert.equal(a.boxes.loss.length + a.boxes.margin.length, 0, 'boxes without costs are only listed as needing costs');
+  // Heavy costs on A: a loss. Light costs on B: a healthy margin, so not listed.
+  a = attention(data, { [A]: [{ from: '2026-01-01', brand: 200 }], [B]: [{ from: '2026-01-01', brand: 1 }] }, null, null, '2026-02-21');
+  assert.deepEqual(a.boxes.loss.map((x) => x.sku), [A]);
+  assert.equal(a.boxes.costs.length, 0);
+  // Margin just under 10% on B: net revenue 2 x 44/1.2 = 73.33, fees -7.22 -> 66.11 before costs.
+  a = attention(data, { [A]: [{ from: '2026-01-01', brand: 1 }], [B]: [{ from: '2026-01-01', brand: 30 }] }, null, null, '2026-02-21');
+  assert.deepEqual(a.boxes.margin.map((x) => x.sku), [B]);
+  assert.ok(a.boxes.margin[0].margin < 0.1 && a.boxes.margin[0].margin >= 0);
+  // A period with only a refund (A in late Feb) is not "losing money".
+  a = attention(data, { [A]: [{ from: '2026-01-01', brand: 200 }], [B]: [{ from: '2026-01-01', brand: 1 }] }, '2026-02-19', '2026-02-28', '2026-02-21');
+  assert.equal(a.boxes.loss.length, 0);
+  // The period limits the box checks: in Feb only B sold.
+  a = attention(data, {}, '2026-02-01', '2026-02-28', '2026-02-21');
+  assert.deepEqual(a.boxes.costs.map((x) => x.sku), [B]);
+  assert.equal(count(a), a.data.length + 1);
 });
 
 test('refuses an incomplete file', () => {

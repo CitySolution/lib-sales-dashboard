@@ -119,3 +119,9 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .costform { display: flex; flex-direction: column; gap: 10px; }
 .costform .t td:first-child { min-width: 0; }
 .names { margin: 0; padding-left: 18px; }
+
+.badge { display: inline-block; min-width: 20px; padding: 1px 6px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 12px; line-height: 18px; text-align: center; margin-left: 4px; }
+.attlist { display: flex; flex-direction: column; gap: 10px; }
+.attitem { border-left: 3px solid var(--brand); padding: 6px 12px; background: var(--hover); border-radius: 0 8px 8px 0; }
+.attitem.click { cursor: pointer; }
+.attitem b { display: block; }

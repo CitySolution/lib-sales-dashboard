@@ -1,6 +1,7 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
 import { summary, byMonth, assemble, saleDates, inRange, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
+import { attention, count as attCount, LIMITS } from './checks.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -98,6 +99,7 @@ function render() {
   renderBoxes(s);
   if (selected) renderBox(selected, s, from, to);
   renderCosts();
+  renderAttention(from, to);
   renderUploads();
 }
 
@@ -255,6 +257,32 @@ function renderBox(sku, s, from, to) {
   const months = byMonth(state.data, state.costs.values, from, to, sku);
   chart($('box-chart'), [...months].map(([m, v]) => ({ label: monthName(m), a: v.rev, b: v.net, tip: `<b>${monthName(m)}</b>Net revenue ${money(v.rev)}<br>Net profit ${money(v.net)}<br>Boxes ${int.format(v.n)}` })));
   $('box-close').onclick = () => { selected = null; el.hidden = true; render(); };
+}
+
+// ---- Attention -------------------------------------------------------------------
+function renderAttention(from, to) {
+  const a = attention(state.data, state.costs.values, from, to, iso(ukToday()));
+  const n = attCount(a);
+  $('att-badge').hidden = !n; $('att-badge').textContent = n;
+  $('att-none').hidden = !!n;
+  $('att-data').hidden = !a.data.length;
+  $('att-data-list').innerHTML = a.data.map((d) => `<div class="attitem${d.sku ? ' click' : ''}"${d.sku ? ` data-sku="${d.sku}"` : ''}><b>${esc(d.title)}${d.sku ? `: ${esc(boxName(d.sku))}` : ''}</b>${esc(d.detail)}</div>`).join('');
+  const table = (id, head, rows, line) => {
+    $(`${id}-card`).hidden = !rows.length;
+    $(id).innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(line).join('')}</tbody>`;
+    sortTable(id);
+  };
+  const name = (sku) => `<td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>`;
+  table('att-costs', ['Box', 'Last sale', 'Boxes', 'Net revenue'], a.boxes.costs,
+    ({ sku, b, last }) => `<tr class="click" data-sku="${sku}">${name(sku)}<td data-v="${last || ''}">${last ? dmy(last) : '–'}</td><td>${int.format(b.n)}</td>${cell(b.rev)}</tr>`);
+  table('att-loss', ['Box', 'Boxes', 'Net revenue', 'Net profit', 'Per box'], a.boxes.loss,
+    ({ sku, b }) => `<tr class="click" data-sku="${sku}">${name(sku)}<td>${int.format(b.n)}</td>${cell(b.rev)}${cell(b.net)}${Number.isFinite(profitPer(b)) ? cell(profitPer(b), 2) : '<td>–</td>'}</tr>`);
+  $('att-margin-help').textContent = `Net profit under ${LIMITS.lowMargin * 100}% of net revenue in this period.`;
+  table('att-margin', ['Box', 'Boxes', 'Net revenue', 'Net profit', 'Margin'], a.boxes.margin,
+    ({ sku, b, margin }) => `<tr class="click" data-sku="${sku}">${name(sku)}<td>${int.format(b.n)}</td>${cell(b.rev)}${cell(b.net)}<td>${pct(margin)}</td></tr>`);
+  $('att-refunds-help').textContent = `${LIMITS.refundRate * 100}% or more of boxes sold were refunded or cancelled (boxes with at least ${LIMITS.refundMinSold} sold).`;
+  table('att-refunds', ['Box', 'Sold', 'Refunded', 'Refund rate'], a.boxes.refunds,
+    ({ sku, b, rate }) => `<tr class="click" data-sku="${sku}">${name(sku)}<td>${int.format(b.u)}</td><td>${int.format(b.r)}</td><td>${pct(rate)}</td></tr>`);
 }
 
 // ---- Costs -------------------------------------------------------------------------
@@ -441,10 +469,10 @@ async function loadSeed() {
 // ---- Wiring ------------------------------------------------------------------------
 function showTab() {
   const tab = (location.hash || '#summary').slice(1);
-  const known = ['summary', 'boxes', 'costs', 'uploads'].includes(tab) ? tab : 'summary';
+  const known = ['summary', 'attention', 'boxes', 'costs', 'uploads'].includes(tab) ? tab : 'summary';
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== `v-${known}`; });
   document.querySelectorAll('#tabs a').forEach((a) => (a.dataset.tab === known ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
-  $('filters').hidden = !['summary', 'boxes', 'costs'].includes(known);
+  $('filters').hidden = !['summary', 'attention', 'boxes', 'costs'].includes(known);
 }
 
 async function load() {
@@ -460,7 +488,7 @@ async function load() {
 }
 
 function onRowClick(table, fn) {
-  $(table).addEventListener('click', (e) => { const tr = e.target.closest('tr[data-sku]'); if (tr) fn(tr.dataset.sku); });
+  $(table).addEventListener('click', (e) => { const el = e.target.closest('[data-sku]'); if (el) fn(el.dataset.sku); });
 }
 
 async function start() {
@@ -486,6 +514,10 @@ async function start() {
   const openBox = (sku) => { selected = sku; location.hash = '#boxes'; render(); $('box').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   onRowClick('boxes', openBox);
   onRowClick('top', openBox);
+  const openCosts = (sku) => { if (!state.admin) return openBox(sku); editing = sku; location.hash = '#costs'; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  onRowClick('att-costs', openCosts);
+  for (const id of ['att-loss', 'att-margin', 'att-refunds', 'att-data-list']) onRowClick(id, openBox);
+  for (const id of ['att-costs', 'att-loss', 'att-margin', 'att-refunds']) sortable(id);
   sortable('top', 10); sortable('uploads'); sortable('cost-log');
   onRowClick('costs', (sku) => { if (!state.admin) return; editing = sku; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
