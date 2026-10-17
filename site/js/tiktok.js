@@ -35,6 +35,12 @@ export const MONEY_KEYS = Object.keys(MONEY);
 // Statement-level items that aren't income or costs: a "bill payment" is LIB topping
 // up a negative TikTok balance, i.e. money moving, not a cost.
 export const NOT_PNL = new Set(['Bill payment (negative balance)']);
+// Items that name the order they're about, so they can go against its box(es).
+export const BY_ORDER = new Set(['Logistics reimbursement', 'TikTok Shop reimbursement', 'Chargeback']);
+// TikTok's daily storage charge: no order, shared across boxes sold (site/js/pnl.js).
+export const WAREHOUSE = 'FBT Warehouse service fee';
+// Stored figures made by this version link order items to boxes; see /api/seed.
+export const PARSER_VERSION = 2;
 
 const REQUIRED = ['Statement date', 'Statement ID', 'Type', 'SKU ID', 'Quantity', 'Product name',
   'Order created date', 'Total settlement amount', 'Net sales', 'Shipping', 'Fees', 'Adjustment amount', ...Object.values(MONEY)];
@@ -86,8 +92,14 @@ export function readWorkbook(XLSX, buffer) {
 //   statements  { id: { date, settlement, rows } }
 //   daily       one row per statement, order date and SKU: units sold (u), units
 //               refunded (r), free units (f, gifts with purchase) and the money columns
-//   adj         statement-level items not tied to a box (FBT warehouse fees,
-//               reimbursements, chargebacks...), per statement, date and type
+//               and `x`: reimbursements/chargebacks for those orders { type: amount }
+//   adj         statement-level items not tied to a box (FBT warehouse fees, and any
+//               reimbursement/chargeback whose order isn't in the file), per
+//               statement, date and type
+// An item that names its order (BY_ORDER) is put against that order's box(es) when the
+// order is anywhere in the file - including statements already loaded, so exporting
+// with some overlap lets a late reimbursement find its order. An order with several
+// boxes is split by their gross sales (or quantity, for free items).
 //   names       SKU ID -> { name, d } (product name on the latest order seen)
 // Every statement is taken whatever its status: a statement that went negative stays
 // "Pending" for good (a bill payment covers it), but its orders and fees are real.
@@ -98,6 +110,7 @@ export function parseOrderDetails({ header, rows, statements: sheetTotals = {} }
   const get = (r, h) => r[col[h]];
 
   const statements = {}, daily = new Map(), adj = new Map(), names = {};
+  const orders = new Map(), pending = []; // order ID -> [{ sku, d, w }]; items waiting for their order
   let first = null, last = null, count = 0;
   rows.forEach((r, i) => {
     const sid = text(get(r, 'Statement ID'));
@@ -138,14 +151,41 @@ export function parseOrderDetails({ header, rows, statements: sheetTotals = {} }
       for (const k of MONEY_KEYS) if (m[k]) t[k] = (t[k] || 0) + m[k];
       const name = text(get(r, 'Product name'));
       if (name && (!names[sku] || odate >= names[sku].d)) names[sku] = { name, d: odate };
+      const oid = text(get(r, 'Order/adjustment ID'));
+      if (oid && m.gs >= 0) {
+        const lines = orders.get(oid) || orders.set(oid, []).get(oid);
+        const l = lines.find((x) => x.sku === sku && x.d === odate);
+        if (l) { l.gs += Math.max(m.gs, 0); l.qty += Math.max(qty, 0); } else lines.push({ sku, d: odate, gs: Math.max(m.gs, 0), qty: Math.max(qty, 0) });
+      }
     } else {
       // Not tied to a box. Its money is all in "Adjustment amount" (checked above).
       if (Math.abs(part(MONEY_KEYS)) > 0.011) throw new Error(`Row ${line}: a "${type}" line has order amounts - this dashboard doesn't expect that`);
+      const rel = 'Related order ID' in col ? text(get(r, 'Related order ID')) : '';
+      if (BY_ORDER.has(type) && /^\d+$/.test(rel)) { pending.push({ sid, odate, type, a: adjAmt, rel }); return; }
       const key = `${sid}|${odate}|${type}`;
       const t = adj.get(key) || adj.set(key, { s: sid, d: odate, t: type, a: 0 }).get(key);
       t.a += adjAmt;
     }
   });
+
+  // Order items: against the order's box(es), in the item's statement, at the order's date.
+  for (const p of pending) {
+    const lines = orders.get(p.rel);
+    if (!lines) {
+      const key = `${p.sid}|${p.odate}|${p.type}`;
+      const t = adj.get(key) || adj.set(key, { s: p.sid, d: p.odate, t: p.type, a: 0 }).get(key);
+      t.a += p.a;
+      continue;
+    }
+    const w = (l) => (lines.some((x) => x.gs > 0) ? l.gs : l.qty || 1);
+    const total = lines.reduce((a, l) => a + w(l), 0);
+    for (const l of lines) {
+      const key = `${p.sid}|${l.d}|${l.sku}`;
+      const t = daily.get(key) || daily.set(key, { s: p.sid, d: l.d, sku: l.sku, u: 0, r: 0, f: 0 }).get(key);
+      t.x = t.x || {};
+      t.x[p.type] = (t.x[p.type] || 0) + (p.a * w(l)) / total;
+    }
+  }
 
   for (const [id, s] of Object.entries(statements)) {
     s.settlement = round2(s.settlement);
@@ -154,9 +194,13 @@ export function parseOrderDetails({ header, rows, statements: sheetTotals = {} }
       throw new Error(`Statement ${id} (${s.date}): its rows add up to £${s.settlement} but the Statements sheet says £${sheetTotals[id]}. The file looks incomplete - download it again.`);
     }
   }
-  const tidy = (o) => { for (const k of Object.keys(o)) if (typeof o[k] === 'number') o[k] = round2(o[k]); return o; };
+  const tidy = (o) => {
+    for (const k of Object.keys(o)) if (typeof o[k] === 'number') o[k] = round2(o[k]);
+    if (o.x) for (const k of Object.keys(o.x)) o.x[k] = round2(o.x[k]);
+    return o;
+  };
   return {
-    statements, names, rows: count, first, last,
+    version: PARSER_VERSION, statements, names, rows: count, first, last,
     daily: [...daily.values()].map(tidy), adj: [...adj.values()].map(tidy),
   };
 }

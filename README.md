@@ -29,16 +29,18 @@ All money in the TikTok export is VAT-inclusive. Per box (`site/js/pnl.js`):
 |---|---|
 | Net revenue (ex VAT) | (gross sales + refunds + seller discounts + their refunds + customer-paid shipping and its refunds) ÷ 1.2 |
 | TikTok fees | every other TikTok shipping and fee column, as shown by TikTok |
+| Other TikTok items | reimbursements and chargebacks on the box's orders (split by gross sales when an order has several boxes), and the box's share of the FBT warehouse fee: each month's fee split across that month's boxes sold |
 | Cost of goods | net boxes × £ per box for each cost line, + commission % × net revenue |
-| Gross profit | net revenue + TikTok fees + cost of goods |
+| Gross profit | net revenue + TikTok fees + other TikTok items + cost of goods |
 | Net profit | gross profit − marketing (net boxes × £ per box) |
 
 - **Net boxes** = boxes sold − boxes refunded. An order cancelled before settling
   appears as a sale and a refund in the same statement, so it nets to zero.
 - **Dates** are order dates, so a refund lands in the month the box was sold.
-- **Shop-level items** (FBT warehouse fees, logistics and TikTok reimbursements,
-  chargebacks) aren't tied to a box; they're added in the Summary to reach "net profit
-  after all costs". **Bill payments** (LiB topping up a negative TikTok balance) are
+- **Shop-level items** are what can't go to a box: a reimbursement or chargeback whose
+  order isn't in the uploaded file (export with a few weeks' overlap so late ones find
+  their order), and warehouse fees in a month with no sales. They're added in the
+  Summary to reach "net profit after all costs". **Bill payments** (LiB topping up a negative TikTok balance) are
   money moving, not income or a cost, and are left out.
 - Boxes with no costs entered are flagged, because their profit is overstated.
 

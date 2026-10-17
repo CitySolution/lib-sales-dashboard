@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { XLSX } from './xlsx.mjs';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
-import { merge, byBox, summary, byMonth, costAt, saleDates } from '../site/js/pnl.js';
+import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count } from '../site/js/checks.js';
 
@@ -61,7 +61,10 @@ test('P&L per box matches a hand calculation', () => {
   close(a.fees, -6.9 - 4.2 - 3.5 - 13.8 + 6.9, 'fees');
   const units = 2 * (2.4 + 0.35 + 2 + 4.5 + 2);
   close(a.cogs, -units - 0.15 * revInc / 1.2, 'COGS');
-  close(a.gross, revInc / 1.2 + a.fees + a.cogs, 'gross');
+  // January's warehouse fee (-12.50) shared over January's 5 boxes sold (A 4, B 1).
+  close(a.other, -12.5 * 4 / 5, 'warehouse share');
+  close(a.otherLines['FBT Warehouse service fee'], -10, 'warehouse line');
+  close(a.gross, revInc / 1.2 + a.fees + a.other + a.cogs, 'gross');
   close(a.marketing, -2, 'marketing');
   close(a.net, a.gross - 2, 'net');
   assert.equal(a.uncosted, 0);
@@ -78,8 +81,10 @@ test('dated costs: each change applies from its date', () => {
 test('summary: shop items count, bill payments do not; settlement reconciles', () => {
   const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
   const s = summary(data, costs);
-  assert.deepEqual(s.shop, { 'FBT Warehouse service fee': -12.5, 'Logistics reimbursement': 34 });
-  close(s.overall, s.total.net + 21.5, 'overall');
+  // The warehouse fee is in the boxes now; the reimbursement names no order, so stays.
+  assert.deepEqual(s.shop, { 'Logistics reimbursement': 34 });
+  close(s.total.otherLines['FBT Warehouse service fee'], -12.5, 'all of it, across boxes');
+  close(s.overall, s.total.net + 34, 'overall');
   const stmts = Object.values(data.statements).reduce((x, t) => x + t.settlement, 0);
   close(s.total.settlement + s.shopTotal + 17.81, stmts, 'boxes + items = TikTok settlement');
   const jan = summary(data, costs, '2026-01-01', '2026-01-31');
@@ -130,6 +135,44 @@ test('attention: boxes with no costs, losing money, low margin, high refunds', (
   a = attention(data, {}, '2026-02-01', '2026-02-28', '2026-02-21');
   assert.deepEqual(a.boxes.costs.map((x) => x.sku), [B]);
   assert.equal(count(a), a.data.length + 1);
+});
+
+test('reimbursements and chargebacks go to the box(es) on their order', () => {
+  const rows = [
+    // One order, two boxes: A (£84) and B (£42).
+    row({ st: '8001', sdate: '2026-03-02', sku: A, qty: 1, name: 'Box A', odate: '2026-03-01', oid: '5001', m: { 'Gross sales': 84 } }),
+    row({ st: '8001', sdate: '2026-03-02', sku: B, qty: 1, name: 'Box B', odate: '2026-03-01', oid: '5001', m: { 'Gross sales': 42 } }),
+    // Later statement: a reimbursement for that order, and a chargeback for an order not in the file.
+    row({ st: '8002', sdate: '2026-03-20', type: 'Logistics reimbursement', odate: '2026-03-01', rel: '5001', adj: 30 }),
+    row({ st: '8002', sdate: '2026-03-20', type: 'Chargeback', odate: '2026-02-11', rel: '4999', adj: -10 }),
+  ];
+  const p = parse(rows);
+  const x = Object.fromEntries(p.daily.filter((r) => r.x).map((r) => [r.sku, { s: r.s, d: r.d, x: r.x }]));
+  assert.deepEqual(x[A], { s: '8002', d: '2026-03-01', x: { 'Logistics reimbursement': 20 } }, 'two thirds, in the reimbursement statement, at the order date');
+  assert.deepEqual(x[B].x, { 'Logistics reimbursement': 10 });
+  assert.deepEqual(p.adj.map((r) => [r.t, r.a]), [['Chargeback', -10]], 'unmatched stays shop-level');
+  // Statement totals still match.
+  close(p.statements['8002'].settlement, 20, '8002');
+  // The order's statement already loaded: the reimbursement still finds its boxes.
+  const { data } = merge(merge(null, { ...p, statements: { 8001: p.statements['8001'] }, daily: p.daily.filter((r) => r.s === '8001'), adj: [] }).data, onlyNew(p, ['8001']));
+  const b = byBox(data, {});
+  close(b.get(A).other, 20, 'A'); close(b.get(B).other, 10, 'B');
+  close(summary(data, {}).shopTotal, -10, 'only the unmatched chargeback is shop-level');
+});
+
+test('warehouse fee: shared by boxes sold in its month; months with no sales stay shop-level', () => {
+  const rows = [
+    row({ st: '9001', sdate: '2026-04-02', sku: A, qty: 3, odate: '2026-04-01', m: { 'Gross sales': 252 } }),
+    row({ st: '9001', sdate: '2026-04-02', sku: B, qty: 1, odate: '2026-04-01', m: { 'Gross sales': 42 } }),
+    row({ st: '9001', sdate: '2026-04-02', type: 'FBT Warehouse service fee', odate: '2026-04-01', adj: -8 }),
+    row({ st: '9002', sdate: '2026-05-02', type: 'FBT Warehouse service fee', odate: '2026-05-01', adj: -5 }),
+  ];
+  const { data } = merge(null, parse(rows));
+  const b = byBox(data, {});
+  close(b.get(A).other, -6, 'A: 3 of 4 boxes'); close(b.get(B).other, -2, 'B: 1 of 4');
+  assert.deepEqual(shopItems(data), { 'FBT Warehouse service fee': -5 }, 'May had no sales');
+  const m = byMonth(data, {});
+  close(m.get('2026-04').other, -8, 'April in the boxes'); close(m.get('2026-05').shopTotal, -5, 'May at shop level');
 });
 
 test('refuses an incomplete file', () => {

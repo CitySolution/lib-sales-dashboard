@@ -10,11 +10,11 @@ export const HEADER = ['Statement date', 'Statement ID', 'Payment ID', 'Status',
 
 const S = (keys) => keys.reduce((a, k) => a + (k || 0), 0);
 // row: { st, sdate, type='Order', sku, qty, name, odate, m: { 'Gross sales': 84, ... }, adj }
-export function row({ st, sdate, type = 'Order', sku = '/', qty = '/', name = '/', odate, m = {}, adj = 0, status = 'Paid' }) {
+export function row({ st, sdate, type = 'Order', sku = '/', qty = '/', name = '/', odate, m = {}, adj = 0, status = 'Paid', oid = String(Math.random()).slice(2), rel = '/' }) {
   const v = (h) => m[h] || 0;
   const net = S(Object.values(MONEY).slice(0, 4).map(v)), ship = S(Object.values(MONEY).slice(4, 16).map(v)), fees = S(Object.values(MONEY).slice(16).map(v));
   const cells = {
-    'Statement date': sdate.replaceAll('-', '/'), 'Statement ID': st, 'Payment ID': '1', Status: status, Currency: 'GBP', Type: type, 'Order/adjustment ID': String(Math.random()).slice(2),
+    'Statement date': sdate.replaceAll('-', '/'), 'Statement ID': st, 'Payment ID': '1', Status: status, Currency: 'GBP', Type: type, 'Order/adjustment ID': oid, 'Related order ID  ': rel,
     'SKU ID': sku, Quantity: String(qty), 'Product name': name, 'SKU name': 'Default', 'Order created date': odate.replaceAll('-', '/'), 'Order shipment date': '/', 'Order delivery date': '/',
     'Total settlement amount': String(Math.round((net + ship + fees + adj) * 100) / 100), 'Net sales': String(net), Shipping: String(ship), Fees: String(fees), 'Adjustment amount': String(adj),
   };

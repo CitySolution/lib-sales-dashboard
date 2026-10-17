@@ -31,6 +31,11 @@ export function sanitise(body) {
     const w = `box row ${i + 1}`;
     const o = { s: owned(r?.s, w), d: date(r?.d, w), sku: ID.test(r?.sku) ? r.sku : bad(`${w} SKU`), u: count(r.u, w), r: count(r.r, w), f: count(r.f, w) };
     for (const k of MONEY_KEYS) if (r[k] != null) o[k] = amount(r[k], `${w} ${k}`);
+    if (r.x != null) {
+      const e = typeof r.x === 'object' && !Array.isArray(r.x) ? Object.entries(r.x) : bad(`${w} order items are not valid`);
+      if (e.length > 20) bad(`${w} has too many order items`);
+      o.x = Object.fromEntries(e.map(([k, v]) => [text(k, `${w} order item type`, 100), amount(v, `${w} ${k}`)]));
+    }
     return o;
   });
   const adj = list(body.adj, 'shop items').map((r, i) => ({ s: owned(r?.s, `item ${i + 1}`), d: date(r?.d, `item ${i + 1}`), t: text(r?.t, `item ${i + 1} type`, 100), a: amount(r?.a, `item ${i + 1}`) }));
@@ -41,7 +46,8 @@ export function sanitise(body) {
   }
   const f = body.file || {};
   const file = { name: typeof f.name === 'string' ? f.name.slice(0, 200) : '', first: f.first == null ? null : date(f.first, 'first order'), last: f.last == null ? null : date(f.last, 'last order') };
-  return { statements, daily, adj, names, file };
+  const version = Number.isInteger(body.version) && body.version > 0 && body.version < 100 ? body.version : 1;
+  return { statements, daily, adj, names, file, version };
 }
 
 export async function onRequestPost({ request, env }) {

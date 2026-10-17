@@ -22,7 +22,7 @@ _setJwksForTests(createLocalJWKSet({ keys: [{ ...(await exportJWK(publicKey)), k
 _setUsers({ admins: ['Boss@CitySolution.co.uk'] });
 
 const store = new Map();
-const kv = { get: async (k, t) => (store.has(k) ? (t === 'json' ? JSON.parse(store.get(k)) : store.get(k)) : null), put: async (k, v) => { store.set(k, v); } };
+const kv = { get: async (k, t) => (store.has(k) ? (t === 'json' ? JSON.parse(store.get(k)) : store.get(k)) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } };
 const env = { TEAM_DOMAIN: TEAM, POLICY_AUD: AUD, LIB_DATA: kv };
 
 const token = (email, { key = privateKey, aud = AUD, iss = TEAM, exp = '1h' } = {}) =>
@@ -34,7 +34,7 @@ const call = async (fn, path, tok, { body, origin = ORIGIN, e = env, type = 'app
 };
 const payload = (rows, loaded = []) => {
   const p = onlyNew(parseOrderDetails(readWorkbook(XLSX, workbook(rows))), loaded);
-  return { statements: p.statements, daily: p.daily, adj: p.adj, names: p.names, file: { name: 'income.xlsx', first: p.first, last: p.last } };
+  return { statements: p.statements, daily: p.daily, adj: p.adj, names: p.names, file: { name: 'income.xlsx', first: p.first, last: p.last }, version: p.version };
 };
 let n = 0;
 const test = async (name, fn) => { await fn(); n++; console.log(`ok - ${name}`); };
@@ -170,5 +170,46 @@ await test('cost import: a commission stored as £ per box by the earlier versio
   const fixed = c.costs.values['1729000000000000009'][0];
   assert.ok(Math.abs(fixed.commission - 0.0535) < 1e-9); assert.ok(!('commissionUnit' in fixed)); assert.equal(fixed.brand, 2);
   for (const sku of skus) assert.deepEqual(c.costs.values[sku], seedCosts[sku], 'others untouched');
+});
+await test('order items and the reader version survive an upload', async () => {
+  store.clear();
+  const body = payload(file1());
+  body.daily = [...body.daily, { s: '7001', d: '2026-01-08', sku: A, u: 0, r: 0, f: 0, x: { 'Logistics reimbursement': 12.5 } }];
+  assert.equal((await call(upload, '/api/upload', admin, { body })).status, 200);
+  const m = (await call(me, '/api/me', admin)).body;
+  assert.equal(m.index.version, body.version);
+  assert.deepEqual(m.batches[0].daily.find((r) => r.x).x, { 'Logistics reimbursement': 12.5 });
+  const bad = payload(file1()); bad.daily[0].x = { 'Logistics reimbursement': 'lots' };
+  assert.equal((await call(upload, '/api/upload', admin, { body: bad })).status, 400);
+});
+await test('rebuild: replaces figures read by an older version, only if they are just the original files', async () => {
+  if (!seed.length) return;
+  store.clear();
+  // As stored by the earlier version: the same statements, no version on the batches.
+  for (let part = 0; part < seed.length; part++) {
+    const { version, ...old } = seed[part];
+    assert.equal((await call(upload, '/api/upload', admin, { body: { ...old, daily: old.daily.map(({ x, ...r }) => r) } })).status, 200);
+  }
+  let m = (await call(me, '/api/me', admin)).body;
+  assert.equal(m.index.version, 1); assert.equal(m.seed_rebuild, true); assert.equal(m.seed_pending, 0);
+  assert.equal((await call(me, '/api/me', viewer)).body.seed_rebuild, false);
+  assert.equal((await call(seedPost, '/api/seed', viewer, { body: { part: 0, rebuild: true } })).status, 403);
+  const oldBatches = m.index.batches;
+  let added = 0;
+  for (let part = 0; part < seed.length; part++) added += (await call(seedPost, '/api/seed', admin, { body: { part, ...(part ? {} : { rebuild: true }) } })).body.added;
+  m = (await call(me, '/api/me', admin)).body;
+  assert.equal(added, Object.keys(m.index.statements).length);
+  assert.equal(m.index.version, 2); assert.equal(m.seed_rebuild, false);
+  for (const k of oldBatches) assert.ok(!store.has(k), 'old batches removed');
+  assert.ok(m.batches.some((b) => b.daily.some((r) => r.x)), 'order items now on boxes');
+  // With anything else uploaded, it refuses and changes nothing.
+  store.clear();
+  const { version, ...old } = seed[0];
+  await call(upload, '/api/upload', admin, { body: { ...old, daily: old.daily.map(({ x, ...r }) => r) } });
+  await call(upload, '/api/upload', admin, { body: { ...payload(file1()), version: undefined } });
+  const before = store.get('index');
+  assert.equal((await call(me, '/api/me', admin)).body.seed_rebuild, false);
+  assert.equal((await call(seedPost, '/api/seed', admin, { body: { part: 0, rebuild: true } })).status, 409);
+  assert.equal(store.get('index'), before);
 });
 console.log(`${n} API tests passed`);

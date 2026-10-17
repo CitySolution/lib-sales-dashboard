@@ -1,6 +1,8 @@
 // What's kept in the LIB_DATA KV namespace:
 //   index        { statements: { id: { date, settlement, rows, ch, batch } },
-//                  batches: [key, ...], uploads: [...], uploaded_at }
+//                  batches: [key, ...], uploads: [...], uploaded_at, version }
+//                  version: the oldest file-reader version among the batches
+//                  (PARSER_VERSION in site/js/tiktok.js); 2+ links order items to boxes
 //   batch:<...>  one upload's new statements: { key, ch, daily, adj, names }
 //   costs        box costs (functions/api/costs.js)
 //
@@ -12,7 +14,7 @@
 // To undo an upload: delete its batch:<...> key and remove that key from `batches`
 // and its statements from `statements` in `index`.
 
-export const emptyIndex = () => ({ statements: {}, batches: [], uploads: [], uploaded_at: null });
+export const emptyIndex = () => ({ statements: {}, batches: [], uploads: [], uploaded_at: null, version: null });
 
 // Stores the statements in `incoming` that aren't already stored, as a new batch.
 // incoming: { statements, daily, adj, names } as made by site/js/tiktok.js (rows carry `s`).
@@ -33,6 +35,8 @@ export async function addBatch(env, who, incoming, file, ch = 'tiktok') {
     index.statements[id] = { ...incoming.statements[id], ch, batch: key };
     settlement += incoming.statements[id].settlement;
   }
+  const v = incoming.version || 1;
+  index.version = index.batches.length ? Math.min(index.version || 1, v) : v;
   index.batches.push(key);
   index.uploads = [...index.uploads, { ...file, at: now, by: who.email, added: fresh.size, already, settlement: Math.round(settlement * 100) / 100 }].slice(-500);
   index.uploaded_at = now;

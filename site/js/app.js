@@ -137,6 +137,7 @@ function renderSummary(s, from, to) {
   $('pl').innerHTML = `<tbody>
     <tr><td>Net revenue (ex VAT)</td>${cell(t.rev)}</tr>
     <tr><td>TikTok fees</td>${cell(t.fees)}</tr>
+    <tr><td>Other TikTok items</td>${cell(t.other)}</tr>
     <tr><td>Cost of goods</td>${cell(t.cogs)}</tr>
     <tr class="sum"><td>Gross profit</td>${cell(t.gross)}</tr>
     <tr><td>Marketing</td>${cell(t.marketing)}</tr>
@@ -194,7 +195,7 @@ const hideTip = () => { $('tip').hidden = true; };
 
 const saleCells = (sku) => { const t = state.spans.get(sku); return `<td>${t ? dmy(t.first) : '–'}</td><td>${t ? dmy(t.last) : '–'}</td>`; };
 const COLS = [
-  ['name', 'Box'], ['first', 'First sale'], ['last', 'Last sale'], ['n', 'Boxes'], ['r', 'Refunded'], ['rev', 'Net revenue'], ['fees', 'TikTok fees'], ['cogs', 'COGS'],
+  ['name', 'Box'], ['first', 'First sale'], ['last', 'Last sale'], ['n', 'Boxes'], ['r', 'Refunded'], ['rev', 'Net revenue'], ['fees', 'TikTok fees'], ['other', 'Other TikTok'], ['cogs', 'COGS'],
   ['marketing', 'Marketing'], ['net', 'Net profit'], ['margin', 'Margin'], ['per', 'Per box'],
 ];
 function renderBoxes(s) {
@@ -209,8 +210,8 @@ function renderBoxes(s) {
     });
   const head = `<thead><tr>${COLS.map(([k, l]) => `<th data-k="${k}"${sort.key === k ? ` aria-sort="${sort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${l}</th>`).join('')}</tr></thead>`;
   const body = rows.map(([sku, b]) => `<tr class="click${b.uncosted ? ' missing' : ''}${sku === selected ? ' sel' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>
-    ${saleCells(sku)}<td>${int.format(b.n)}</td><td>${int.format(b.r)}</td>${cell(b.rev)}${cell(b.fees)}${cell(b.cogs)}${cell(b.marketing)}${cell(b.net)}<td>${pct(ratio(b.net, b.rev))}</td>${Number.isFinite(profitPer(b)) ? cell(profitPer(b), 2) : '<td>–</td>'}</tr>`).join('');
-  $('boxes').innerHTML = head + `<tbody>${body || '<tr><td colspan="12" class="muted">No boxes in this period.</td></tr>'}</tbody>`;
+    ${saleCells(sku)}<td>${int.format(b.n)}</td><td>${int.format(b.r)}</td>${cell(b.rev)}${cell(b.fees)}${cell(b.other)}${cell(b.cogs)}${cell(b.marketing)}${cell(b.net)}<td>${pct(ratio(b.net, b.rev))}</td>${Number.isFinite(profitPer(b)) ? cell(profitPer(b), 2) : '<td>–</td>'}</tr>`).join('');
+  $('boxes').innerHTML = head + `<tbody>${body || '<tr><td colspan="13" class="muted">No boxes in this period.</td></tr>'}</tbody>`;
 }
 
 const FEE_LABEL = (k) => MONEY[k] || k;
@@ -244,6 +245,9 @@ function renderBox(sku, s, from, to) {
         <tr class="head"><td colspan="3">TikTok fees</td></tr>
         ${fees.map(([k, v]) => row(esc(FEE_LABEL(k)), v)).join('') || '<tr><td class="muted" colspan="3">None</td></tr>'}
         <tr class="sum"><td>Total TikTok fees</td>${cell(b.fees, 2)}<td></td></tr>
+        <tr class="head"><td colspan="3">Other TikTok items</td></tr>
+        ${Object.entries(b.otherLines).filter(([, v]) => Math.abs(v) >= 0.005).map(([k, v]) => row(esc(k === 'FBT Warehouse service fee' ? 'FBT warehouse fee (share)' : k), v, k === 'FBT Warehouse service fee' && b.u ? `${money(v / b.u, 2)} per box sold` : '')).join('') || '<tr><td class="muted" colspan="3">None</td></tr>'}
+        <tr class="sum"><td>Total other TikTok items</td>${cell(b.other, 2)}<td></td></tr>
         <tr class="head"><td colspan="3">Cost of goods</td></tr>
         ${COST_LINES.map(({ k, label }) => row(label, b.cogsLines[k] || 0, unit(k))).join('')}
         <tr class="sum"><td>Total COGS</td>${cell(b.cogs, 2)}<td></td></tr>
@@ -372,7 +376,12 @@ function renderCostEdit(sku) {
 function renderUploads() {
   const d = state.data;
   $('upload').hidden = !state.admin;
-  $('seed').hidden = !state.seed_pending && !state.seed_costs;
+  $('seed').hidden = !state.seed_pending && !state.seed_costs && !state.seed_rebuild;
+  $('seed-title').textContent = state.seed_rebuild ? 'Update the figures' : 'Load the initial figures and box costs';
+  $('seed-text').textContent = state.seed_rebuild
+    ? 'Re-reads the four TikTok exports supplied at the start, so reimbursements and chargebacks go against the box on their order, and the FBT warehouse fee can be shared across boxes. Your box costs are kept.'
+    : 'The four TikTok income exports supplied when the dashboard was built (orders from 1 January to 11 October 2026), and the box costs from the original Finance Dashboard spreadsheet. This only needs doing once: statements already loaded are skipped, and costs already entered are never overwritten.';
+  $('seed-btn').textContent = state.seed_rebuild ? 'Update figures' : 'Load initial figures';
   const st = Object.values(d?.statements || {});
   const dates = st.map((s) => s.date).sort();
   $('loaded').innerHTML = st.length
@@ -432,7 +441,7 @@ async function publish() {
         const r = await api('/api/upload', {
           statements: Object.fromEntries([...part].map((id) => [id, fresh.statements[id]])),
           daily: fresh.daily.filter((x) => part.has(x.s)), adj: fresh.adj.filter((x) => part.has(x.s)),
-          names: fresh.names, file: { name, first: fresh.first, last: fresh.last },
+          names: fresh.names, file: { name, first: fresh.first, last: fresh.last }, version: fresh.version,
         });
         added += r.added;
       }
@@ -451,15 +460,16 @@ async function loadSeed() {
   $('seed-btn').disabled = true;
   try {
     let added = 0;
-    for (let part = 0, parts = state.seed_pending ? 1 : 0; part < parts; part++) {
-      setStatus(`Loading the initial figures… file ${part + 1}`);
-      const r = await api('/api/seed', { part });
+    const rebuild = !!state.seed_rebuild;
+    for (let part = 0, parts = state.seed_pending || rebuild ? 1 : 0; part < parts; part++) {
+      setStatus(`${rebuild ? 'Updating' : 'Loading'} the figures… file ${part + 1}`);
+      const r = await api('/api/seed', { part, ...(rebuild && part === 0 ? { rebuild: true } : {}) });
       parts = r.parts; added += r.added;
     }
     setStatus('Loading box costs from the original spreadsheet…');
     const { costs } = await api('/api/seed', { costs: true });
     await load();
-    setStatus(`Loaded ${added ? `${added} TikTok statements and ` : ''}costs for ${costs} boxes. Boxes still marked "no costs" need theirs entered on the Costs tab.`);
+    setStatus(rebuild ? `Figures updated: ${added} TikTok statements re-read.` : `Loaded ${added ? `${added} TikTok statements and ` : ''}costs for ${costs} boxes. Boxes still marked "no costs" need theirs entered on the Costs tab.`);
   } catch (err) {
     setStatus(err.message, true);
     $('seed-btn').disabled = false;

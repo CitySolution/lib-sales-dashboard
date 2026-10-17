@@ -22,7 +22,7 @@ _setJwksForTests(createLocalJWKSet({ keys: [{ ...(await exportJWK(publicKey)), k
 const email = viewer ? 'viewer@latestinbeauty.com' : 'admin@citysolution.co.uk';
 const jwt = await new SignJWT({ email }).setProtectedHeader({ alg: 'RS256', kid: 'k' }).setIssuer(TEAM).setAudience(AUD).setIssuedAt().setExpirationTime('12h').sign(privateKey);
 const store = new Map();
-const env = { TEAM_DOMAIN: TEAM, POLICY_AUD: AUD, LIB_DATA: { get: async (k, t) => (store.has(k) ? (t === 'json' ? JSON.parse(store.get(k)) : store.get(k)) : null), put: async (k, v) => { store.set(k, v); } } };
+const env = { TEAM_DOMAIN: TEAM, POLICY_AUD: AUD, LIB_DATA: { get: async (k, t) => (store.has(k) ? (t === 'json' ? JSON.parse(store.get(k)) : store.get(k)) : null), put: async (k, v) => { store.set(k, v); }, delete: async (k) => { store.delete(k); } } };
 const ORIGIN = 'http://localhost:8788';
 const call = (fn, path, body) => fn({ request: new Request(ORIGIN + path, { method: body ? 'POST' : 'GET', headers: { 'cf-access-jwt-assertion': jwt, 'content-type': 'application/json', origin: ORIGIN }, body }), env });
 
@@ -31,7 +31,7 @@ for (const f of files) {
   const loaded = Object.keys(JSON.parse(store.get('index') || '{}').statements || {});
   const p = onlyNew(parseOrderDetails(readWorkbook(XLSX, readFileSync(f))), loaded);
   const name = f.split('/').pop().replace(/^[0-9a-f]{8}-/, '');
-  const r = await (await call(upload, '/api/upload', JSON.stringify({ statements: p.statements, daily: p.daily, adj: p.adj, names: p.names, file: { name, first: p.first, last: p.last } }))).json();
+  const r = await (await call(upload, '/api/upload', JSON.stringify({ statements: p.statements, daily: p.daily, adj: p.adj, names: p.names, file: { name, first: p.first, last: p.last }, version: p.version }))).json();
   console.log(name, r);
 }
 

@@ -6,13 +6,16 @@
 //   Net revenue (ex VAT)  = (gross sales + refunds + seller discounts + their refunds
 //                            + customer-paid shipping and its refunds) / 1.2
 //   TikTok fees           = every other shipping and fee column, as shown by TikTok
+//   Other TikTok items    = reimbursements and chargebacks on the box's orders, and its
+//                           share of the FBT warehouse fee: each month's fee split across
+//                           the boxes sold that month, by number sold
 //   COGS                  = net units x £ per unit for each cost line, plus
 //                           commission = net revenue x commission %
-//   Gross profit          = net revenue + TikTok fees + COGS
+//   Gross profit          = net revenue + TikTok fees + other TikTok items + COGS
 //   Marketing             = net units x £ per unit
 //   Net profit            = gross profit + marketing
 // Net units = units sold - units refunded (cancelled orders are a sale and a refund).
-import { MONEY_KEYS, SHIPPING, FEES, NOT_PNL, round2 } from './tiktok.js';
+import { MONEY_KEYS, SHIPPING, FEES, NOT_PNL, WAREHOUSE, round2 } from './tiktok.js';
 
 export const VAT_RATE = 0.2;
 export const REVENUE_KEYS = ['gs', 'gsr', 'sd', 'sdr', 'cps', 'cpsr'];
@@ -54,6 +57,7 @@ export function merge(data, incoming, channel = 'tiktok') {
     const t = daily.get(dk(row));
     if (!t) { daily.set(dk(row), row); continue; }
     for (const k of ['u', 'r', 'f', ...MONEY_KEYS]) if (row[k]) t[k] = round2((t[k] || 0) + row[k]);
+    if (row.x) { t.x = { ...(t.x || {}) }; for (const [k, v] of Object.entries(row.x)) t.x[k] = round2((t.x[k] || 0) + v); }
   }
   const ak = (r) => `${r.ch}|${r.d}|${r.t}`;
   const adj = new Map(out.adj.map((r) => [ak(r), r]));
@@ -107,15 +111,28 @@ export function costAt(entries, d) {
 
 // ---- Totals ------------------------------------------------------------------------
 
-const blank = () => ({ u: 0, r: 0, f: 0, n: 0, revInc: 0, rev: 0, vat: 0, fees: 0, feeLines: {}, cogs: 0, cogsLines: {}, gross: 0, marketing: 0, net: 0, settlement: 0, uncosted: 0 });
+const blank = () => ({ u: 0, r: 0, f: 0, n: 0, revInc: 0, rev: 0, vat: 0, fees: 0, feeLines: {}, other: 0, otherLines: {}, cogs: 0, cogsLines: {}, gross: 0, marketing: 0, net: 0, settlement: 0, uncosted: 0 });
+
+// The FBT warehouse fee per box sold, per month: { 'YYYY-MM': £ per box } (negative).
+// Months with fees but no boxes sold keep their fee at shop level.
+export function warehouseRates(data) {
+  const fee = {}, units = {};
+  for (const r of data?.adj || []) if (r.t === WAREHOUSE) fee[r.d.slice(0, 7)] = (fee[r.d.slice(0, 7)] || 0) + r.a;
+  for (const r of data?.daily || []) if (r.u) units[r.d.slice(0, 7)] = (units[r.d.slice(0, 7)] || 0) + r.u;
+  return Object.fromEntries(Object.entries(fee).filter(([m]) => units[m]).map(([m, f]) => [m, f / units[m]]));
+}
 
 // Adds one stored day row into a running total, costing it at that day's costs.
-function add(t, row, costs) {
+function add(t, row, costs, rates) {
   const n = (row.u || 0) - (row.r || 0);
   const revInc = REVENUE_KEYS.reduce((a, k) => a + (row[k] || 0), 0);
   const rev = revInc / (1 + VAT_RATE);
   let fees = 0;
   for (const k of FEE_KEYS) if (row[k]) { fees += row[k]; t.feeLines[k] = (t.feeLines[k] || 0) + row[k]; }
+  let other = 0;
+  for (const [k, v] of Object.entries(row.x || {})) { other += v; t.otherLines[k] = (t.otherLines[k] || 0) + v; }
+  const wh = (rates?.[row.d.slice(0, 7)] || 0) * (row.u || 0);
+  if (wh) { other += wh; t.otherLines[WAREHOUSE] = (t.otherLines[WAREHOUSE] || 0) + wh; }
   const c = costAt(costs, row.d);
   let cogs = 0, marketing = 0;
   if (c) {
@@ -126,8 +143,8 @@ function add(t, row, costs) {
     marketing = -n * (c.marketing || 0);
   } else if (n || revInc) t.uncosted += n;
   t.u += row.u || 0; t.r += row.r || 0; t.f += row.f || 0; t.n += n;
-  t.revInc += revInc; t.rev += rev; t.vat += revInc - rev; t.fees += fees; t.settlement += revInc + fees;
-  t.cogs += cogs; t.gross += rev + fees + cogs; t.marketing += marketing; t.net += rev + fees + cogs + marketing;
+  t.revInc += revInc; t.rev += rev; t.vat += revInc - rev; t.fees += fees; t.other += other; t.settlement += revInc + fees + other;
+  t.cogs += cogs; t.gross += rev + fees + other + cogs; t.marketing += marketing; t.net += rev + fees + other + cogs + marketing;
 }
 
 export const inRange = (d, from, to) => (!from || d >= from) && (!to || d <= to);
@@ -146,19 +163,21 @@ export function saleDates(data) {
 
 // Per box for a date range: Map sku -> totals (see `blank`).
 export function byBox(data, costs, from, to) {
-  const out = new Map();
+  const out = new Map(), rates = warehouseRates(data);
   for (const row of data?.daily || []) {
     if (!inRange(row.d, from, to)) continue;
     const t = out.get(row.sku) || out.set(row.sku, blank()).get(row.sku);
-    add(t, row, costs?.[row.sku]);
+    add(t, row, costs?.[row.sku], rates);
   }
   return out;
 }
 
-// Statement-level items in a range, by type (only those that count towards profit).
+// Statement-level items in a range, by type: those that count towards profit and
+// aren't already in the boxes (warehouse fees are, for months when boxes sold).
+const shopLevel = (r, rates) => !NOT_PNL.has(r.t) && !(r.t === WAREHOUSE && r.d.slice(0, 7) in rates);
 export function shopItems(data, from, to) {
-  const out = {};
-  for (const r of data?.adj || []) if (inRange(r.d, from, to) && !NOT_PNL.has(r.t)) out[r.t] = (out[r.t] || 0) + r.a;
+  const out = {}, rates = warehouseRates(data);
+  for (const r of data?.adj || []) if (inRange(r.d, from, to) && shopLevel(r, rates)) out[r.t] = (out[r.t] || 0) + r.a;
   return out;
 }
 
@@ -167,8 +186,9 @@ export function summary(data, costs, from, to) {
   const boxes = byBox(data, costs, from, to);
   const t = blank();
   for (const b of boxes.values()) {
-    for (const k of ['u', 'r', 'f', 'n', 'revInc', 'rev', 'vat', 'fees', 'cogs', 'gross', 'marketing', 'net', 'settlement', 'uncosted']) t[k] += b[k];
+    for (const k of ['u', 'r', 'f', 'n', 'revInc', 'rev', 'vat', 'fees', 'other', 'cogs', 'gross', 'marketing', 'net', 'settlement', 'uncosted']) t[k] += b[k];
     for (const [k, v] of Object.entries(b.feeLines)) t.feeLines[k] = (t.feeLines[k] || 0) + v;
+    for (const [k, v] of Object.entries(b.otherLines)) t.otherLines[k] = (t.otherLines[k] || 0) + v;
     for (const [k, v] of Object.entries(b.cogsLines)) t.cogsLines[k] = (t.cogsLines[k] || 0) + v;
   }
   const shop = shopItems(data, from, to);
@@ -178,16 +198,16 @@ export function summary(data, costs, from, to) {
 
 // Per month (YYYY-MM) in a range, for trends: Map month -> summary-like totals.
 export function byMonth(data, costs, from, to, sku = null) {
-  const out = new Map();
+  const out = new Map(), rates = warehouseRates(data);
   for (const row of data?.daily || []) {
     if (!inRange(row.d, from, to) || (sku && row.sku !== sku)) continue;
     const m = row.d.slice(0, 7);
     const t = out.get(m) || out.set(m, { ...blank(), shopTotal: 0 }).get(m);
-    add(t, row, costs?.[row.sku]);
+    add(t, row, costs?.[row.sku], rates);
   }
   if (!sku) {
     for (const r of data?.adj || []) {
-      if (!inRange(r.d, from, to) || NOT_PNL.has(r.t)) continue;
+      if (!inRange(r.d, from, to) || !shopLevel(r, rates)) continue;
       const m = r.d.slice(0, 7);
       const t = out.get(m) || out.set(m, { ...blank(), shopTotal: 0 }).get(m);
       t.shopTotal += r.a;

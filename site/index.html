@@ -68,7 +68,7 @@
         <div class="card">
           <h2>Profit and loss</h2>
           <table class="t pl" id="pl"></table>
-          <p class="muted small">Shop-level items are TikTok charges and credits not tied to one box (e.g. FBT warehouse storage, lost-parcel reimbursements). Bill payments (topping up a negative balance) aren't income or costs and are left out.</p>
+          <p class="muted small">Other TikTok items are reimbursements and chargebacks on each box's orders, and its share of the FBT warehouse fee (each month's fee shared across the boxes sold that month). Shop-level items are the rest: anything whose order isn't in the uploaded files, and warehouse fees for a month with no sales. Bill payments (topping up a negative balance) aren't income or costs and are left out.</p>
         </div>
       </div>
     </section>
@@ -131,8 +131,8 @@
     <!-- Uploads -->
     <section class="view" id="v-uploads" hidden>
       <div class="card" id="seed" hidden>
-        <h2>Load the initial figures and box costs</h2>
-        <p>The four TikTok income exports supplied when the dashboard was built (orders from 1 January to 11 October 2026), and the box costs from the original Finance Dashboard spreadsheet. This only needs doing once: statements already loaded are skipped, and costs already entered are never overwritten.</p>
+        <h2 id="seed-title"></h2>
+        <p id="seed-text"></p>
         <div class="ctrl left"><button class="btn" id="seed-btn">Load initial figures</button></div>
       </div>
       <div class="card" id="upload" hidden>

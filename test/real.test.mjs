@@ -41,10 +41,12 @@ for (const [sku, b] of Object.entries(ref.boxes)) {
 assert.equal(boxes.size, Object.keys(ref.boxes).length);
 const adj = {};
 for (const r of data.adj) adj[r.t] = (adj[r.t] || 0) + r.a;
+for (const r of data.daily) for (const [t, v] of Object.entries(r.x || {})) adj[t] = (adj[t] || 0) + v;
 for (const [t, v] of Object.entries(ref.shop)) close(adj[t], v, t);
-// Settlement = box revenue (incl VAT) + fees + every statement-level item.
+// Settlement = boxes (revenue incl VAT + fees + order items + warehouse share) + the
+// remaining shop-level items + bill payments.
 const s = summary(data, {});
-close(s.total.settlement + Object.values(adj).reduce((a, v) => a + v, 0), ref.settlement, 'settlement identity');
+close(s.total.settlement + s.shopTotal + (adj['Bill payment (negative balance)'] || 0), ref.settlement, 'settlement identity');
 console.log(`matches Python reference: ${boxes.size} boxes, ${ref.statements} statements, settlement £${ref.settlement}`);
 console.log(`stored size: ${(JSON.stringify(data).length / 1024).toFixed(0)} KB, ${data.daily.length} day rows`);
 console.log('totals', Object.fromEntries(Object.entries(s.total).filter(([, v]) => typeof v === 'number').map(([k, v]) => [k, Math.round(v)])), 'shop', s.shop);
