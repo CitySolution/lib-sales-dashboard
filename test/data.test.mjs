@@ -6,6 +6,7 @@ import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems, prices } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count, withoutHidden } from '../site/js/checks.js';
+import { covered, vsTargets } from '../site/js/targets.js';
 import { book, boxesSheet, periodSheet, plSheet, costHistorySheet, statementsSheet } from '../site/js/export.js';
 
 const close = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: got ${a}, expected ${b}`);
@@ -227,6 +228,21 @@ test('prices: list price, discount and price paid per box sold', () => {
   const s = summary(data, costs);
   close(prices(s.total).list, (336 + 88) / 6, 'all boxes');
   close([...byMonth(data, costs).values()].reduce((x, m) => x + prices(m).given, 0), 30, 'months add up');
+});
+
+test('targets: achieved against target, and pace up to the latest order loaded', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  const months = byMonth(data, costs), jan = months.get('2026-01');
+  assert.equal(covered('2026-02', '2026-01-31'), 0); assert.equal(covered('2026-01', '2026-02-03'), 1);
+  close(covered('2026-02', '2026-02-07'), 7 / 28, 'a week of February');
+  const T = { '2026-01': { rev: 200, n: 4, net: 100 }, '2026-02': { rev: 100 }, '2026-03': { rev: 1 } };
+  const rows = vsTargets(T, months, '2026-01-01', '2026-02-28', '2026-02-07');
+  assert.deepEqual(rows.map((r) => r.m), ['2026-01', '2026-02'], 'only months in the period');
+  close(rows[0].rev.actual, jan.rev, 'revenue'); close(rows[0].rev.pct, jan.rev / 200, '% of target');
+  close(rows[0].net.actual, jan.net + jan.shopTotal, 'net profit after all costs');
+  assert.equal(rows[0].n.expected, 1, 'January is over');
+  close(rows[1].rev.projected, months.get('2026-02').rev * 4, 'a week in, on pace for 4x');
+  assert.equal(rows[1].n, null, 'no target set');
 });
 
 test('Excel downloads: real numbers and dates that add up', () => {

@@ -10,6 +10,7 @@ import { onRequestPost as upload } from '../functions/api/upload.js';
 import { onRequestPost as costsPost } from '../functions/api/costs.js';
 import { onRequestPost as seedPost } from '../functions/api/seed.js';
 import { onRequestPost as dismissPost } from '../functions/api/dismiss.js';
+import { onRequestPost as targetsPost } from '../functions/api/targets.js';
 import seed from '../functions/_lib/seed.json' with { type: 'json' };
 import seedCosts from '../functions/_lib/seed-costs.json' with { type: 'json' };
 import { assemble, merge } from '../site/js/pnl.js';
@@ -226,5 +227,21 @@ await test('hiding attention items: admins only, validated, shown again, logged'
   d = (await call(me, '/api/me', viewer)).body.dismissed;
   assert.deepEqual(Object.keys(d.values), ['gap:2026-01-01:2026-01-05']);
   assert.equal(d.log.length, 3);
+});
+await test('targets: admins only, validated, cleared when empty, logged', async () => {
+  store.clear();
+  const months = { '2026-10': { rev: 150000, n: 4000, net: 50000 }, '2026-11': { rev: 200000 } };
+  assert.equal((await call(targetsPost, '/api/targets', viewer, { body: { months } })).status, 403);
+  for (const bad of [{ '2026-13': { rev: 1 } }, { '2026-10': { rev: -5 } }, { '2026-10': { n: 'lots' } }, { '2026-10': [1] }, null]) {
+    assert.equal((await call(targetsPost, '/api/targets', admin, { body: { months: bad } })).status, 400, JSON.stringify(bad));
+  }
+  assert.equal((await call(targetsPost, '/api/targets', admin, { body: { months } })).status, 200);
+  assert.equal((await call(targetsPost, '/api/targets', admin, { body: { months: { '2026-12': { net: -1000 } } } })).status, 200, 'a loss can be a target');
+  let t = (await call(me, '/api/me', viewer)).body.targets;
+  assert.deepEqual(t.values, { ...months, '2026-12': { net: -1000 } });
+  await call(targetsPost, '/api/targets', admin, { body: { months: { '2026-11': null, '2026-12': {} } } });
+  t = (await call(me, '/api/me', viewer)).body.targets;
+  assert.deepEqual(Object.keys(t.values), ['2026-10']);
+  assert.equal(t.log.length, 3); assert.equal(t.log[0].by, 'boss@citysolution.co.uk');
 });
 console.log(`${n} API tests passed`);

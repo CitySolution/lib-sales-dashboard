@@ -2,7 +2,8 @@
 import { summary, byMonth, assemble, saleDates, inRange, prices, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 import { attention, withoutHidden, count as attCount, LIMITS, GROUPS } from './checks.js';
-import { book, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet, pricePeriodSheet, priceBoxSheet } from './export.js';
+import { METRICS, achieved, covered, vsTargets } from './targets.js';
+import { book, targetsSheet, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet, pricePeriodSheet, priceBoxSheet } from './export.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -97,6 +98,7 @@ function render() {
   $('range').textContent = from || to ? `${dmy(from) || 'start'} – ${dmy(to) || 'latest'} · by order date` : 'All orders loaded · by order date';
   const s = summary(state.data, state.costs.values, from, to);
   renderSummary(s, from, to);
+  renderTargets(from, to);
   renderBoxes(s);
   renderPrices(s, from, to);
   if (selected) renderBox(selected, s, from, to);
@@ -151,6 +153,73 @@ function renderSummary(s, from, to) {
     ${shop.map(([k, v]) => `<tr><td>${esc(k)}</td>${cell(v)}</tr>`).join('')}
     <tr class="total"><td>Net profit after all costs</td>${cell(s.overall)}</tr>
     ${pctRow('Net profit after all costs %', ratio(s.overall, t.rev))}</tbody>`;
+}
+
+// ---- Targets -----------------------------------------------------------------------
+// Monthly targets (functions/api/targets.js) against what was achieved. Pace is judged
+// up to the latest order loaded, not today.
+const fmtMetric = (k, v) => (METRICS.find((x) => x.k === k).money ? money(v) : int.format(Math.round(v)));
+const lastOrder = () => state.data?.daily?.at(-1)?.d || null;
+const onPace = (p) => p.pct >= p.expected - 0.005;
+function renderTargets(from, to) {
+  const T = state.targets.values, dataTo = lastOrder();
+  $('targets-set').hidden = !state.admin;
+  const months = byMonth(state.data, state.costs.values);
+  // The bars: the latest month of the period with figures loaded.
+  const m = [to, dataTo].filter(Boolean).sort()[0]?.slice(0, 7);
+  $('targets-title').textContent = m ? `Targets · ${new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}` : 'Targets';
+  const t = m && T[m], share = m ? covered(m, dataTo) : 0, a = achieved(months.get(m));
+  $('target-bars').innerHTML = !t
+    ? `<p class="muted">${Object.keys(T).length ? 'No targets set for this month.' : 'No targets set yet.'}${state.admin ? ' Tap <b>Set targets</b> to add them.' : ''}</p>`
+    : METRICS.filter(({ k }) => t[k] != null).map(({ k, label }) => {
+      const p = { actual: a[k], target: t[k], pct: t[k] ? a[k] / t[k] : NaN, expected: share };
+      const w = Math.max(0, Math.min(100, (p.pct || 0) * 100));
+      const pace = share < 1 && share > 0 ? `On pace for ${fmtMetric(k, a[k] / share)} (${pct(a[k] / share / t[k])} of target)` : share >= 1 ? (p.pct >= 1 ? 'Target met' : 'Target missed') : 'No figures loaded for this month yet';
+      return `<div class="tbar"><div class="tbar-top"><span>${label}</span><span><b>${fmtMetric(k, a[k])}</b> of ${fmtMetric(k, t[k])} · ${pct(p.pct)}</span></div>
+        <div class="track" title="The tick is where the month's figures so far should be"><div class="fill${onPace(p) ? '' : ' behind'}" style="width:${w}%"></div>${share > 0 && share < 1 ? `<div class="pace" style="left:${share * 100}%"></div>` : ''}</div>
+        <div class="muted small">${pace}</div></div>`;
+    }).join('');
+  const rows = vsTargets(T, months, from, to, dataTo);
+  const tot = Object.fromEntries(METRICS.map(({ k }) => [k, rows.filter((r) => r[k]).reduce((x, r) => ({ actual: x.actual + r[k].actual, target: x.target + r[k].target }), { actual: 0, target: 0 })]));
+  // Green or red by pace; the total mixes finished and unfinished months, so isn't coloured.
+  const cells = (p, k) => (p ? `<td>${fmtMetric(k, p.actual)}</td><td>${fmtMetric(k, p.target)}</td><td${p.expected == null ? '' : ` class="${onPace(p) ? 'ok' : 'neg'}"`}>${pct(p.pct)}</td>` : '<td>–</td><td>–</td><td>–</td>');
+  $('targets').hidden = !rows.length;
+  $('targets').innerHTML = `<thead><tr><th>Month</th>${METRICS.map(({ label }) => `<th>${label}</th><th>Target</th><th>%</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr><td data-v="${r.m}">${monthName(r.m)}</td>${METRICS.map(({ k }) => cells(r[k], k)).join('')}</tr>`).join('')}</tbody>
+    ${rows.length > 1 ? `<tfoot><tr class="sum"><td>Total</td>${METRICS.map(({ k }) => (tot[k].target ? cells({ ...tot[k], pct: tot[k].actual / tot[k].target }, k) : '<td>–</td><td>–</td><td>–</td>')).join('')}</tr></tfoot>` : ''}`;
+  sortTable('targets');
+  $('targets-help').textContent = rows.length
+    ? `Months in the period with targets. Net profit is after all costs, as in the profit and loss. Figures loaded up to ${dmy(dataTo)}; the tick on each bar is where the month should be by then, and green means on pace.`
+    : '';
+  if (editingTargets) renderTargetEdit();
+}
+
+let editingTargets = null; // the year being edited
+function renderTargetEdit() {
+  const el = $('target-edit'), y = editingTargets, T = state.targets.values;
+  el.hidden = false;
+  const ms = Array.from({ length: 12 }, (_, i) => `${y}-${String(i + 1).padStart(2, '0')}`);
+  const thisYear = +iso(ukToday()).slice(0, 4);
+  el.innerHTML = `<div class="ctrl"><h2>Set targets</h2><button class="btn ghost" id="te-close">Close</button></div>
+    <div class="ctrl left"><label>Year <select id="te-year">${[thisYear - 1, thisYear, thisYear + 1].map((v) => `<option${v === y ? ' selected' : ''}>${v}</option>`).join('')}</select></label></div>
+    <div class="tablewrap targetform"><table class="t"><thead><tr><th>Month</th>${METRICS.map(({ label, money: m }) => `<th>${label}${m ? ' (£)' : ''}</th>`).join('')}</tr></thead><tbody>
+    ${ms.map((m) => `<tr><td>${monthName(m)}</td>${METRICS.map(({ k, label }) => `<td><input type="number" inputmode="decimal" step="any" ${k === 'net' ? '' : 'min="0" '}data-m="${m}" data-k="${k}" value="${T[m]?.[k] ?? ''}" aria-label="${monthName(m)} ${label}"></td>`).join('')}</tr>`).join('')}
+    </tbody></table></div>
+    <p class="muted small">Leave a box empty for no target. Net revenue is ex VAT; net profit is after all costs, as in the profit and loss.</p>
+    <div class="ctrl left"><button class="btn" id="te-save">Save ${y}</button><span id="te-msg" class="muted"></span></div>`;
+  $('te-close').onclick = () => { editingTargets = null; el.hidden = true; };
+  $('te-year').onchange = () => { editingTargets = +$('te-year').value; renderTargetEdit(); };
+  $('te-save').onclick = async () => {
+    const months = Object.fromEntries(ms.map((m) => [m, {}]));
+    el.querySelectorAll('input[data-m]').forEach((i) => { if (i.value.trim() !== '') months[i.dataset.m][i.dataset.k] = +i.value; });
+    for (const m of ms) if (!Object.keys(months[m]).length) months[m] = null;
+    $('te-msg').textContent = 'Saving…';
+    try {
+      state.targets = (await api('/api/targets', { months })).targets;
+      editingTargets = null; el.hidden = true; render();
+      setStatus(`Targets saved for ${y}.`);
+    } catch (err) { $('te-msg').textContent = err.message; }
+  };
 }
 
 // Grouped bars per month, one axis (£), with a hover tooltip per month.
@@ -534,6 +603,7 @@ async function download(key) {
   const sets = {
     pl: () => ['Profit and loss', [['Profit and loss', plSheet(s.total, s)], boxes(), months()]],
     chart: () => ['Month by month', [months()]],
+    targets: () => ['Targets', [['Targets', targetsSheet(vsTargets(state.targets.values, byMonth(D, C), from, to, lastOrder()))]]],
     top: () => ['Boxes', [boxes()]],
     boxes: () => ['Boxes', [boxes()]],
     box: () => [boxName(selected), [['Profit and loss', plSheet(s.boxes.get(selected))], months(selected), ['By day', periodSheet(byMonth(D, C, from, to, selected, 10))], ['Prices by month', pricePeriodSheet(byMonth(D, C, from, to, selected))]]],
@@ -626,6 +696,8 @@ async function start() {
     const btn = e.target.closest('button[data-show]');
     if (btn) dismiss({ key: btn.dataset.show, show: true });
   });
+  $('targets-set').addEventListener('click', () => { editingTargets = +iso(ukToday()).slice(0, 4); renderTargetEdit(); $('target-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+  sortable('targets');
   sortable('top', 10); sortable('uploads'); sortable('cost-log'); sortable('price-months'); sortable('price-boxes');
   onRowClick('costs', (sku) => { if (!state.admin) return; editing = sku; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));

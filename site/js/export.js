@@ -2,6 +2,7 @@
 // rounded text on screen), so they can be explored further. Shared with the tests.
 import { MONEY } from './tiktok.js';
 import { COST_LINES, MARKETING, costAt, prices } from './pnl.js';
+import { METRICS } from './targets.js';
 
 const MONEY_Z = '"£"#,##0.00;-"£"#,##0.00';
 const serial = (ms) => ms / 864e5 + 25569; // Excel's day number
@@ -65,6 +66,10 @@ export const pricePeriodSheet = (periods) => [[[...periods.keys()][0]?.length ==
   ...[...periods].map(([k, t]) => [k.length === 10 ? day(k) : month(k), ...priceCells(t)])];
 export const priceBoxSheet = (boxes, name) => [['Box', 'SKU', ...PRICES],
   ...[...boxes].filter(([, b]) => b.u).sort(([, a], [, b]) => prices(b).pct - prices(a).pct).map(([sku, b]) => [name(sku), sku, ...priceCells(b)])];
+
+// Targets against what was achieved, per month, from vsTargets().
+export const targetsSheet = (rows) => [['Month', ...METRICS.flatMap(({ label }) => [label, `${label} target`, `${label} % of target`])],
+  ...rows.map((r) => [month(r.m), ...METRICS.flatMap(({ k, money: isMoney }) => (r[k] ? [isMoney ? gbp(r[k].actual) : r[k].actual, isMoney ? gbp(r[k].target) : r[k].target, pc(r[k].pct)] : ['', '', '']))])];
 
 const costRow = (c) => [...COST_LINES, MARKETING].map(({ k, pct }) => (c ? (pct ? pc(c[k] || 0, '0.00%') : gbp(c[k])) : ''));
 const costHead = [...COST_LINES, MARKETING].map((c) => c.label);
