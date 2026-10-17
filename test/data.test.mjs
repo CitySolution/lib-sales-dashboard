@@ -5,7 +5,7 @@ import { XLSX } from './xlsx.mjs';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
-import { attention, count } from '../site/js/checks.js';
+import { attention, count, withoutHidden } from '../site/js/checks.js';
 
 const close = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: got ${a}, expected ${b}`);
 const parse = (rows, st) => parseOrderDetails(readWorkbook(XLSX, workbook(rows, st)));
@@ -173,6 +173,21 @@ test('warehouse fee: shared by boxes sold in its month; months with no sales sta
   assert.deepEqual(shopItems(data), { 'FBT Warehouse service fee': -5 }, 'May had no sales');
   const m = byMonth(data, {});
   close(m.get('2026-04').other, -8, 'April in the boxes'); close(m.get('2026-05').shopTotal, -5, 'May at shop level');
+});
+
+test('attention: hidden items drop out until their date, per issue and box', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  const a = attention(data, {}, null, null, '2026-03-10');
+  assert.equal(a.boxes.costs.length, 2);
+  const hidden = { [`costs:${A}`]: { until: '2026-03-17', by: 'x@citysolution.co.uk' }, stale: { until: null, by: 'x' }, [`loss:${B}`]: { until: null } };
+  let v = withoutHidden(a, hidden, '2026-03-10');
+  assert.deepEqual(v.boxes.costs.map((x) => x.sku), [B], 'A hidden, B still shown');
+  assert.ok(!v.data.some((d) => d.kind === 'stale'), 'hidden for good');
+  assert.equal(v.data.filter((d) => d.kind === 'gap').length, 2, 'other data items still shown');
+  assert.deepEqual(v.hidden.map((h) => h.key).sort(), [`costs:${A}`, 'stale'], 'only what is currently flagged is listed as hidden');
+  assert.equal(count(v), count(a) - 2);
+  v = withoutHidden(a, hidden, '2026-03-18');
+  assert.equal(v.boxes.costs.length, 2, 'back after the snooze ends');
 });
 
 test('refuses an incomplete file', () => {

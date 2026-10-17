@@ -12,6 +12,8 @@ sign in. Setup: **[SETUP.md](SETUP.md)**.
   overdue (latest statement over 7 days old), gaps in the statements, refunds whose sales
   aren't loaded, and for the period chosen: boxes with no costs (biggest first), losing
   money, margin under 10%, or 10%+ refunded (20+ sold). Limits are in `site/js/checks.js`.
+  Admins can hide an item that's fine as it is, for a week, a month or for good
+  (`functions/api/dismiss.js`); hidden items are listed at the bottom with Show again.
 - **Boxes** — every box with its full profit and loss (the same lines as the original
   spreadsheet), tracked by **TikTok SKU ID**, so a renamed box keeps its history.
 - **Costs** — the costs TikTok doesn't know about, per box: brand contributions,

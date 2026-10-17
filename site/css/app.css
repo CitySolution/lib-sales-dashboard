@@ -125,3 +125,5 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .attitem { border-left: 3px solid var(--brand); padding: 6px 12px; background: var(--hover); border-radius: 0 8px 8px 0; }
 .attitem.click { cursor: pointer; }
 .attitem b { display: block; }
+select.hide { font-size: 13px; padding: 4px 6px; color: var(--muted); }
+.attitem select.hide { display: block; margin-top: 6px; }

@@ -12,14 +12,14 @@ export async function onRequestGet({ request, env }) {
   try {
     const who = await identify(request, env);
     const kv = env.LIB_DATA;
-    const [indexRaw, costsRaw] = await Promise.all([kv.get('index'), kv.get('costs')]);
+    const [indexRaw, costsRaw, dismissedRaw] = await Promise.all([kv.get('index'), kv.get('costs'), kv.get('dismissed')]);
     const index = indexRaw ? JSON.parse(indexRaw) : null;
     const batches = index ? await Promise.all(index.batches.map((k) => kv.get(k))) : [];
     const seed = who.admin
       ? { seed_pending: seedPending(index), seed_costs: seedCostsPending(costsRaw && JSON.parse(costsRaw)), seed_rebuild: seedRebuild(index) }
       : { seed_pending: 0, seed_costs: 0, seed_rebuild: false };
     const head = JSON.stringify({ ...who, ...seed });
-    const body = `${head.slice(0, -1)},"costs":${costsRaw || '{"values":{},"log":[]}'},"index":${indexRaw || 'null'},"batches":[${batches.filter(Boolean).join(',')}]}`;
+    const body = `${head.slice(0, -1)},"costs":${costsRaw || '{"values":{},"log":[]}'},"dismissed":${dismissedRaw || '{"values":{},"log":[]}'},"index":${indexRaw || 'null'},"batches":[${batches.filter(Boolean).join(',')}]}`;
     return new Response(body, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
   } catch (err) {
     return fail(err);

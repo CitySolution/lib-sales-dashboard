@@ -9,6 +9,7 @@ import { onRequestGet as me } from '../functions/api/me.js';
 import { onRequestPost as upload } from '../functions/api/upload.js';
 import { onRequestPost as costsPost } from '../functions/api/costs.js';
 import { onRequestPost as seedPost } from '../functions/api/seed.js';
+import { onRequestPost as dismissPost } from '../functions/api/dismiss.js';
 import seed from '../functions/_lib/seed.json' with { type: 'json' };
 import seedCosts from '../functions/_lib/seed-costs.json' with { type: 'json' };
 import { assemble, merge } from '../site/js/pnl.js';
@@ -211,5 +212,19 @@ await test('rebuild: replaces figures read by an older version, only if they are
   assert.equal((await call(me, '/api/me', admin)).body.seed_rebuild, false);
   assert.equal((await call(seedPost, '/api/seed', admin, { body: { part: 0, rebuild: true } })).status, 409);
   assert.equal(store.get('index'), before);
+});
+await test('hiding attention items: admins only, validated, shown again, logged', async () => {
+  store.clear();
+  assert.equal((await call(dismissPost, '/api/dismiss', viewer, { body: { key: `margin:${A}`, until: null } })).status, 403);
+  for (const body of [{ key: '<script>' }, { key: `margin:${A}`, until: 'next week' }, {}]) assert.equal((await call(dismissPost, '/api/dismiss', admin, { body })).status, 400);
+  assert.equal((await call(dismissPost, '/api/dismiss', admin, { body: { key: `margin:${A}`, until: '2026-11-01' } })).status, 200);
+  assert.equal((await call(dismissPost, '/api/dismiss', admin, { body: { key: 'gap:2026-01-01:2026-01-05', until: null } })).status, 200);
+  let d = (await call(me, '/api/me', viewer)).body.dismissed;
+  assert.deepEqual(Object.keys(d.values).sort(), ['gap:2026-01-01:2026-01-05', `margin:${A}`]);
+  assert.equal(d.values[`margin:${A}`].until, '2026-11-01'); assert.equal(d.values[`margin:${A}`].by, 'boss@citysolution.co.uk');
+  await call(dismissPost, '/api/dismiss', admin, { body: { key: `margin:${A}`, show: true } });
+  d = (await call(me, '/api/me', viewer)).body.dismissed;
+  assert.deepEqual(Object.keys(d.values), ['gap:2026-01-01:2026-01-05']);
+  assert.equal(d.log.length, 3);
 });
 console.log(`${n} API tests passed`);

@@ -1,7 +1,7 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
 import { summary, byMonth, assemble, saleDates, inRange, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
-import { attention, count as attCount, LIMITS } from './checks.js';
+import { attention, withoutHidden, count as attCount, LIMITS } from './checks.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -264,16 +264,24 @@ function renderBox(sku, s, from, to) {
 }
 
 // ---- Attention -------------------------------------------------------------------
+// Admins can hide an item for a week, a month or for good (functions/api/dismiss.js).
+const hideMenu = (key) => (state.admin
+  ? `<select class="hide" data-key="${esc(key)}" aria-label="Hide this"><option value="">Hide…</option><option value="7">For 1 week</option><option value="30">For 1 month</option><option value="always">Always</option></select>`
+  : '');
 function renderAttention(from, to) {
-  const a = attention(state.data, state.costs.values, from, to, iso(ukToday()));
+  const today = iso(ukToday());
+  const a = withoutHidden(attention(state.data, state.costs.values, from, to, today), state.dismissed.values, today);
   const n = attCount(a);
   $('att-badge').hidden = !n; $('att-badge').textContent = n;
   $('att-none').hidden = !!n;
+  $('att-hidden-card').hidden = !a.hidden.length;
+  $('att-hidden').innerHTML = `<thead><tr><th>Item</th><th>Hidden until</th><th>By</th>${state.admin ? '<th></th>' : ''}</tr></thead><tbody>${a.hidden.map((h) => `<tr><td>${esc(h.title)}${h.sku ? `: ${esc(boxName(h.sku))}` : ''}</td><td data-v="${h.until || '9999'}">${h.until ? dmy(h.until) : 'Always'}</td><td>${esc(h.by)}</td>${state.admin ? `<td><button class="btn ghost" data-show="${esc(h.key)}">Show again</button></td>` : ''}</tr>`).join('')}</tbody>`;
   $('att-data').hidden = !a.data.length;
-  $('att-data-list').innerHTML = a.data.map((d) => `<div class="attitem${d.sku ? ' click' : ''}"${d.sku ? ` data-sku="${d.sku}"` : ''}><b>${esc(d.title)}${d.sku ? `: ${esc(boxName(d.sku))}` : ''}</b>${esc(d.detail)}</div>`).join('');
+  $('att-data-list').innerHTML = a.data.map((d) => `<div class="attitem${d.sku ? ' click' : ''}"${d.sku ? ` data-sku="${d.sku}"` : ''}><b>${esc(d.title)}${d.sku ? `: ${esc(boxName(d.sku))}` : ''}</b>${esc(d.detail)}${hideMenu(d.key)}</div>`).join('');
   const table = (id, head, rows, line) => {
     $(`${id}-card`).hidden = !rows.length;
-    $(id).innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rows.map(line).join('')}</tbody>`;
+    const hideCol = state.admin ? '<th></th>' : '';
+    $(id).innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}${hideCol}</tr></thead><tbody>${rows.map((r) => line(r).replace(/<\/tr>$/, `${state.admin ? `<td>${hideMenu(r.key)}</td>` : ''}</tr>`)).join('')}</tbody>`;
     sortTable(id);
   };
   const name = (sku) => `<td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>`;
@@ -498,7 +506,10 @@ async function load() {
 }
 
 function onRowClick(table, fn) {
-  $(table).addEventListener('click', (e) => { const el = e.target.closest('[data-sku]'); if (el) fn(el.dataset.sku); });
+  $(table).addEventListener('click', (e) => {
+    if (e.target.closest('select, button')) return;
+    const el = e.target.closest('[data-sku]'); if (el) fn(el.dataset.sku);
+  });
 }
 
 async function start() {
@@ -527,7 +538,20 @@ async function start() {
   const openCosts = (sku) => { if (!state.admin) return openBox(sku); editing = sku; location.hash = '#costs'; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   onRowClick('att-costs', openCosts);
   for (const id of ['att-loss', 'att-margin', 'att-refunds', 'att-data-list']) onRowClick(id, openBox);
-  for (const id of ['att-costs', 'att-loss', 'att-margin', 'att-refunds']) sortable(id);
+  for (const id of ['att-costs', 'att-loss', 'att-margin', 'att-refunds', 'att-hidden']) sortable(id);
+  const dismiss = async (body) => {
+    try { state.dismissed = (await api('/api/dismiss', body)).dismissed; render(); } catch (err) { setStatus(err.message, true); }
+  };
+  $('v-attention').addEventListener('change', (e) => {
+    const sel = e.target.closest('select.hide');
+    if (!sel || !sel.value) return;
+    const until = sel.value === 'always' ? null : iso(new Date(ukToday().getTime() + Number(sel.value) * 864e5));
+    dismiss({ key: sel.dataset.key, until });
+  });
+  $('v-attention').addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-show]');
+    if (btn) dismiss({ key: btn.dataset.show, show: true });
+  });
   sortable('top', 10); sortable('uploads'); sortable('cost-log');
   onRowClick('costs', (sku) => { if (!state.admin) return; editing = sku; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
