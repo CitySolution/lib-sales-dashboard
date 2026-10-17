@@ -8,6 +8,9 @@ import { _setJwksForTests, _setUsers } from '../functions/_lib/auth.js';
 import { onRequestGet as me } from '../functions/api/me.js';
 import { onRequestPost as upload } from '../functions/api/upload.js';
 import { onRequestPost as costsPost } from '../functions/api/costs.js';
+import { onRequestPost as seedPost } from '../functions/api/seed.js';
+import seed from '../functions/_lib/seed.json' with { type: 'json' };
+import { assemble, merge } from '../site/js/pnl.js';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 import { workbook, file1, file2, A } from './fixture.mjs';
 
@@ -52,12 +55,13 @@ await test('other email domains -> 403, even with a valid sign-in', async () => 
   for (const e of ['someone@gmail.com', 'x@latestinbeauty.com.evil.com', 'x@evil-citysolution.co.uk', 'x@sub.latestinbeauty.com', 'citysolution.co.uk']) {
     const r = await call(me, '/api/me', await token(e));
     assert.equal(r.status, 403, e);
-    assert.ok(!('data' in r.body));
+    assert.ok(!('index' in r.body) && !('batches' in r.body));
   }
 });
 await test('allowed domains can view; only admins are admins', async () => {
   const v = await call(me, '/api/me', viewer);
-  assert.equal(v.status, 200); assert.equal(v.body.admin, false); assert.equal(v.body.data, null);
+  assert.equal(v.status, 200); assert.equal(v.body.admin, false); assert.equal(v.body.index, null); assert.deepEqual(v.body.batches, []);
+  assert.equal(v.body.seed_pending, 0, 'viewers are never offered the initial load');
   const a = await call(me, '/api/me', admin);
   assert.equal(a.body.admin, true); assert.equal(a.body.email, 'boss@citysolution.co.uk');
 });
@@ -73,14 +77,19 @@ await test('admin changes must come from the dashboard, as JSON', async () => {
 await test('upload adds statements; overlapping and repeat uploads only add new ones', async () => {
   const r1 = await call(upload, '/api/upload', admin, { body: payload(file1()) });
   assert.deepEqual(r1.body, { ok: true, added: 2, already: 0 });
-  const after1 = store.get('data');
+  const index1 = store.get('index');
   // A browser that didn't filter (or a stale page) can't double-count.
   const r2 = await call(upload, '/api/upload', admin, { body: payload(file2()) });
   assert.deepEqual(r2.body, { ok: true, added: 1, already: 1 });
-  assert.equal(store.get('data_prev'), after1);
+  assert.notEqual(store.get('index'), index1);
   const r3 = await call(upload, '/api/upload', admin, { body: payload(file2()) });
   assert.deepEqual(r3.body, { ok: true, added: 0, already: 2 });
-  const d = (await call(me, '/api/me', viewer)).body.data;
+  const m = (await call(me, '/api/me', viewer)).body;
+  const d = assemble(m.index, m.batches);
+  assert.equal(m.batches.length, 2, 'one batch per upload that added something');
+  // Stored in batches, the figures are the same as adding the files together directly.
+  const direct = merge(merge(null, payload(file1())).data, payload(file2())).data;
+  assert.deepEqual(d.daily, direct.daily); assert.deepEqual(d.adj, direct.adj); assert.deepEqual(d.skus, direct.skus);
   assert.equal(Object.keys(d.statements).length, 3);
   assert.equal(d.uploads.length, 2);
   assert.equal(d.uploads[1].by, 'boss@citysolution.co.uk');
@@ -95,9 +104,9 @@ await test('bad upload data is refused', async () => {
     { ...good, daily: [{ ...good.daily[0], sku: '<script>' }] },
     { ...good, adj: [{ ...good.adj[0], d: '2026-13-45' }] },
   ];
-  const before = store.get('data');
+  const before = store.get('index');
   for (const body of cases) assert.equal((await call(upload, '/api/upload', admin, { body })).status, 400, JSON.stringify(body).slice(0, 80));
-  assert.equal(store.get('data'), before);
+  assert.equal(store.get('index'), before);
 });
 await test('costs: admins set dated costs; bad values refused; changes logged', async () => {
   const entries = [{ from: '2026-02-01', brand: 3, pallet: 0.35, packaging: 2, labour: 4.5, other: 2, commission: 0.15, marketing: 0 }, { from: '2026-01-01', brand: 2.4 }];
@@ -110,5 +119,21 @@ await test('costs: admins set dated costs; bad values refused; changes logged', 
   }
   const c = (await call(me, '/api/me', viewer)).body.costs;
   assert.equal(c.log.length, 1); assert.equal(c.log[0].by, 'boss@citysolution.co.uk');
+});
+await test('initial load: admins only, each part once, adds up to the statements bundled', async () => {
+  store.clear();
+  assert.equal((await call(seedPost, '/api/seed', viewer, { body: { part: 0 } })).status, 403);
+  assert.equal((await call(seedPost, '/api/seed', admin, { body: { part: 'x' } })).status, 400);
+  const before = (await call(me, '/api/me', admin)).body;
+  assert.equal(before.seed_pending, seed.length);
+  let added = 0;
+  for (let part = 0; part < seed.length; part++) added += (await call(seedPost, '/api/seed', admin, { body: { part } })).body.added;
+  const want = new Set(seed.flatMap((p) => Object.keys(p.statements)));
+  assert.equal(added, want.size);
+  for (let part = 0; part < seed.length; part++) assert.equal((await call(seedPost, '/api/seed', admin, { body: { part } })).body.added, 0, 'second load adds nothing');
+  const after = (await call(me, '/api/me', admin)).body;
+  assert.equal(after.seed_pending, 0);
+  const d = assemble(after.index, after.batches);
+  if (seed.length) assert.equal(Object.keys(d.statements).length, want.size);
 });
 console.log(`${n} API tests passed`);

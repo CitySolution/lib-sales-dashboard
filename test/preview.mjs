@@ -10,6 +10,7 @@ import { _setJwksForTests, _setUsers } from '../functions/_lib/auth.js';
 import { onRequestGet as me } from '../functions/api/me.js';
 import { onRequestPost as upload } from '../functions/api/upload.js';
 import { onRequestPost as costs } from '../functions/api/costs.js';
+import { onRequestPost as seed } from '../functions/api/seed.js';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 
 const args = process.argv.slice(2);
@@ -27,7 +28,7 @@ const call = (fn, path, body) => fn({ request: new Request(ORIGIN + path, { meth
 
 _setUsers({ admins: ['admin@citysolution.co.uk'] });
 for (const f of files) {
-  const loaded = Object.keys(JSON.parse(store.get('data') || '{}').statements || {});
+  const loaded = Object.keys(JSON.parse(store.get('index') || '{}').statements || {});
   const p = onlyNew(parseOrderDetails(readWorkbook(XLSX, readFileSync(f))), loaded);
   const name = f.split('/').pop().replace(/^[0-9a-f]{8}-/, '');
   const r = await (await call(upload, '/api/upload', JSON.stringify({ statements: p.statements, daily: p.daily, adj: p.adj, names: p.names, file: { name, first: p.first, last: p.last } }))).json();
@@ -37,7 +38,7 @@ for (const f of files) {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 createServer(async (req, res) => {
   const url = new URL(req.url, ORIGIN);
-  const routes = { '/api/me': me, '/api/upload': upload, '/api/costs': costs };
+  const routes = { '/api/me': me, '/api/upload': upload, '/api/costs': costs, '/api/seed': seed };
   if (routes[url.pathname]) {
     const body = req.method === 'POST' ? await new Promise((ok) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => ok(b)); }) : undefined;
     const r = await call(routes[url.pathname], url.pathname, body);

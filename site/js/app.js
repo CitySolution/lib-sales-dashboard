@@ -1,5 +1,5 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
-import { summary, byMonth, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
+import { summary, byMonth, assemble, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 
 const $ = (id) => document.getElementById(id);
@@ -276,6 +276,7 @@ function renderCostEdit(sku) {
 function renderUploads() {
   const d = state.data;
   $('upload').hidden = !state.admin;
+  $('seed').hidden = !state.seed_pending;
   const st = Object.values(d?.statements || {});
   const dates = st.map((s) => s.date).sort();
   $('loaded').innerHTML = st.length
@@ -320,14 +321,24 @@ async function pickFiles() {
   $('publish').disabled = !pending.length;
 }
 
+const CHUNK = 15;
 async function publish() {
   $('publish').disabled = true;
   try {
     let added = 0;
     for (const { name, fresh } of pending) {
-      setStatus(`Adding ${name}…`);
-      const r = await api('/api/upload', { statements: fresh.statements, daily: fresh.daily, adj: fresh.adj, names: fresh.names, file: { name, first: fresh.first, last: fresh.last } });
-      added += r.added;
+      // A few statements per request keeps each one within Cloudflare's CPU limit.
+      const ids = Object.keys(fresh.statements);
+      for (let i = 0; i < ids.length; i += CHUNK) {
+        setStatus(`Adding ${name}… ${Math.min(i + CHUNK, ids.length)} of ${ids.length} statements`);
+        const part = new Set(ids.slice(i, i + CHUNK));
+        const r = await api('/api/upload', {
+          statements: Object.fromEntries([...part].map((id) => [id, fresh.statements[id]])),
+          daily: fresh.daily.filter((x) => part.has(x.s)), adj: fresh.adj.filter((x) => part.has(x.s)),
+          names: fresh.names, file: { name, first: fresh.first, last: fresh.last },
+        });
+        added += r.added;
+      }
     }
     pending = []; $('files').value = ''; $('preview').innerHTML = '';
     await load();
@@ -335,6 +346,24 @@ async function publish() {
   } catch (err) {
     setStatus(err.message, true);
     $('publish').disabled = false;
+  }
+}
+
+// The TikTok files supplied when the dashboard was built, one file per request.
+async function loadSeed() {
+  $('seed-btn').disabled = true;
+  try {
+    let added = 0;
+    for (let part = 0, parts = 1; part < parts; part++) {
+      setStatus(`Loading the initial figures… file ${part + 1}`);
+      const r = await api('/api/seed', { part });
+      parts = r.parts; added += r.added;
+    }
+    await load();
+    setStatus(`Loaded ${added} TikTok statements. Next: enter each box's costs on the Costs tab.`);
+  } catch (err) {
+    setStatus(err.message, true);
+    $('seed-btn').disabled = false;
   }
 }
 
@@ -349,6 +378,7 @@ function showTab() {
 
 async function load() {
   state = await api('/api/me');
+  state.data = assemble(state.index, state.batches);
   const st = Object.values(state.data?.statements || {}).map((s) => s.date).sort();
   $('who').textContent = `${state.email}${state.admin ? ' · admin' : ''}`;
   $('coverage').textContent = st.length ? `TikTok statements loaded up to ${dmy(st[st.length - 1])}${state.data.uploaded_at ? ` · last updated ${new Date(state.data.uploaded_at).toLocaleDateString('en-GB')}` : ''}` : '';
@@ -383,5 +413,6 @@ async function start() {
   onRowClick('costs', (sku) => { if (!state.admin) return; editing = sku; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
   $('publish').addEventListener('click', publish);
+  $('seed-btn').addEventListener('click', loadSeed);
 }
 start();

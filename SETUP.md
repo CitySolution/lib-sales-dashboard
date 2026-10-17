@@ -69,5 +69,6 @@ For the first load, upload every export since 1 January 2026 (several files at o
 fine). Then enter each box's costs on the **Costs** tab. Boxes without costs are
 flagged on the Summary.
 
-**Rollback:** the version before each upload is kept as `data_prev` in the
-`lib-sales-dashboard-data` KV namespace.
+**Undoing an upload:** each upload is stored as its own `batch:...` key in the
+`lib-sales-dashboard-data` KV namespace, listed in the `index` key. Delete the batch
+key and remove it (and its statements) from `index` - see `functions/_lib/store.js`.

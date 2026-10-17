@@ -1,10 +1,10 @@
 // POST /api/upload - admins only. Receives the totals the admin's browser worked out
-// from a TikTok income export (the raw file never reaches the server), adds the
-// statements not already stored, and keeps the previous version as 'data_prev'.
+// from a TikTok income export (the raw file never reaches the server) and stores the
+// statements not already stored as a new batch (functions/_lib/store.js).
 // Statements already stored are ignored, so uploading overlapping files is safe.
 import { adminJson, json, fail, HttpError } from '../_lib/auth.js';
+import { addBatch } from '../_lib/store.js';
 import { MONEY_KEYS } from '../../site/js/tiktok.js';
-import { merge } from '../../site/js/pnl.js';
 
 const MAX_BYTES = 20_000_000;
 const MAX_ROWS = 200_000;
@@ -47,19 +47,8 @@ export function sanitise(body) {
 export async function onRequestPost({ request, env }) {
   try {
     const { who, body } = await adminJson(request, env, MAX_BYTES);
-    const incoming = sanitise(body);
-    const kv = env.LIB_DATA;
-    const raw = await kv.get('data');
-    const cur = raw ? JSON.parse(raw) : null;
-    const { data, added } = merge(cur, incoming, 'tiktok');
-    const already = Object.keys(incoming.statements).length - added.length;
-    if (!added.length) return json({ ok: true, added: 0, already });
-    const now = new Date().toISOString();
-    const settlement = added.reduce((a, id) => a + incoming.statements[id].settlement, 0);
-    const uploads = [...(cur?.uploads || []), { ...incoming.file, at: now, by: who.email, added: added.length, already, settlement: Math.round(settlement * 100) / 100 }].slice(-500);
-    if (raw) await kv.put('data_prev', raw);
-    await kv.put('data', JSON.stringify({ version: 1, ...data, uploads, uploaded_at: now }));
-    return json({ ok: true, added: added.length, already });
+    const { file, ...incoming } = sanitise(body);
+    return json({ ok: true, ...(await addBatch(env, who, incoming, file)) });
   } catch (err) {
     return fail(err);
   }

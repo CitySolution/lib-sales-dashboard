@@ -75,6 +75,24 @@ export function merge(data, incoming, channel = 'tiktok') {
   return { data: out, added: [...fresh] };
 }
 
+// The figures as the page uses them, from what /api/me sends: the index and the
+// stored batches (functions/_lib/store.js), added together in upload order.
+export function assemble(index, batches) {
+  if (!index?.batches?.length) return null;
+  const byKey = new Map(batches.map((b) => [b.key, b]));
+  const statementsOf = new Map();
+  for (const [id, s] of Object.entries(index.statements)) {
+    if (!statementsOf.has(s.batch)) statementsOf.set(s.batch, {});
+    statementsOf.get(s.batch)[id] = s;
+  }
+  let data = null;
+  for (const key of index.batches) {
+    const b = byKey.get(key);
+    if (b) data = merge(data, { statements: statementsOf.get(key) || {}, daily: b.daily, adj: b.adj, names: b.names }, b.ch).data;
+  }
+  return data && { ...data, uploads: index.uploads, uploaded_at: index.uploaded_at };
+}
+
 // ---- Costs -------------------------------------------------------------------------
 
 // costs: { sku: [{ from: 'YYYY-MM-DD', brand, pallet, ..., commission }] }
