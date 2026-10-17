@@ -16,4 +16,4 @@ id = "6d1ef1d744dd4ee4ae7f964ad8bbb83d"
 #   POLICY_AUD:  the Access application's "Application Audience (AUD) Tag"
 [vars]
 TEAM_DOMAIN = "https://elb-dashboard-pages.cloudflareaccess.com"
-POLICY_AUD = ""
+POLICY_AUD = "010d3db78c276be83543ecaa8d319b7b9ca078a550a172aedeb9e0715ff40463"
