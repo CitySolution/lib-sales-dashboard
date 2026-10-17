@@ -47,6 +47,44 @@ function range() {
   }
 }
 
+// ---- Sorting any list table --------------------------------------------------------
+// Tap a heading to sort by that column, again to reverse. Works from what the cells
+// show, or a cell's data-v when the text doesn't sort (dates: give an ISO date).
+// Empty cells ('–') always go last. `limit` shows only the first n rows after sorting.
+const tableSort = {};
+function cellValue(td) {
+  const v = (td?.dataset.v ?? td?.textContent ?? '').trim();
+  if (!v || v === '–') return null;
+  const n = v.replace(/[£,%\s]/g, '').replace('−', '-');
+  if (/^-?\d+(\.\d+)?$/.test(n)) return +n;
+  return v.toLowerCase();
+}
+function sortTable(id, limit = 0) {
+  const t = $(id), s = tableSort[id], body = t.tBodies[0];
+  if (!body) return;
+  t.classList.add('sortable');
+  [...(t.tHead?.rows[0]?.cells || [])].forEach((th, i) => (s?.col === i ? th.setAttribute('aria-sort', s.dir > 0 ? 'ascending' : 'descending') : th.removeAttribute('aria-sort')));
+  const rows = [...body.rows];
+  if (s && rows.every((r) => r.cells.length > s.col)) {
+    rows.sort((a, b) => {
+      const x = cellValue(a.cells[s.col]), y = cellValue(b.cells[s.col]);
+      if (x == null || y == null) return (x == null) - (y == null);
+      return (typeof x === 'string' ? x.localeCompare(y) : x - y) * s.dir;
+    }).forEach((r) => body.append(r));
+  }
+  if (limit) rows.forEach((r) => { r.hidden = [...body.rows].indexOf(r) >= limit; });
+}
+function sortable(id, limit = 0) {
+  $(id).addEventListener('click', (e) => {
+    const th = e.target.closest('thead th');
+    if (!th) return;
+    const col = th.cellIndex, cur = tableSort[id];
+    const sample = cellValue($(id).tBodies[0]?.rows[0]?.cells[col]);
+    tableSort[id] = { col, dir: cur?.col === col ? -cur.dir : typeof sample === 'string' ? 1 : -1 };
+    sortTable(id, limit);
+  });
+}
+
 // ---- Rendering ---------------------------------------------------------------------
 const boxName = (sku) => state.data?.skus?.[sku]?.name || `SKU ${sku}`;
 const profitPer = (b) => ratio(b.net, b.n);
@@ -90,7 +128,8 @@ function renderSummary(s, from, to) {
   const rows = [...s.boxes].filter(([, b]) => b.u || b.r).sort(([, a], [, b]) => b.net - a.net);
   const head = '<thead><tr><th>Box</th><th>Boxes</th><th>Net revenue</th><th>Net profit</th><th>Margin</th><th>Per box</th></tr></thead>';
   const line = ([sku, b]) => `<tr class="click${b.uncosted ? ' missing' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}</td><td>${int.format(b.n)}</td>${cell(b.rev)}${cell(b.net)}<td>${pct(ratio(b.net, b.rev))}</td>${Number.isFinite(profitPer(b)) ? cell(profitPer(b), 2) : '<td>–</td>'}</tr>`;
-  $('top').innerHTML = head + `<tbody>${rows.slice(0, 10).map(line).join('') || '<tr><td colspan="6" class="muted">No sales in this period.</td></tr>'}</tbody>`;
+  $('top').innerHTML = head + `<tbody>${rows.map(line).join('') || '<tr><td colspan="6" class="muted">No sales in this period.</td></tr>'}</tbody>`;
+  sortTable('top', 10);
 
   const shop = Object.entries(s.shop).sort(([a], [b]) => a.localeCompare(b));
   $('pl').innerHTML = `<tbody>
@@ -261,7 +300,8 @@ function renderCosts() {
   }).join('')}</tbody>`;
   const log = (state.costs.log || []).slice(-15).reverse();
   $('cost-log-card').hidden = !log.length;
-  $('cost-log').innerHTML = `<thead><tr><th>Box</th><th>When</th><th>Who</th></tr></thead><tbody>${log.map((l) => `<tr><td>${esc(boxName(l.sku))}</td><td>${new Date(l.at).toLocaleString('en-GB')}</td><td>${esc(l.by)}</td></tr>`).join('')}</tbody>`;
+  $('cost-log').innerHTML = `<thead><tr><th>Box</th><th>When</th><th>Who</th></tr></thead><tbody>${log.map((l) => `<tr><td>${esc(boxName(l.sku))}</td><td data-v="${l.at}">${new Date(l.at).toLocaleString('en-GB')}</td><td>${esc(l.by)}</td></tr>`).join('')}</tbody>`;
+  sortTable('cost-log');
   if (editing) renderCostEdit(editing);
 }
 
@@ -311,7 +351,8 @@ function renderUploads() {
     ? `<p>${int.format(st.length)} TikTok statements, settled ${dmy(dates[0])} to ${dmy(dates[dates.length - 1])}, totalling ${money(st.reduce((a, s) => a + s.settlement, 0), 2)} (matches TikTok's statements).</p>`
     : '<p class="muted">Nothing loaded yet.</p>';
   const ups = (d?.uploads || []).slice().reverse();
-  $('uploads').innerHTML = ups.length ? `<thead><tr><th>File</th><th>When</th><th>Who</th><th>Orders</th><th>New statements</th><th>Already loaded</th><th>Settlement added</th></tr></thead><tbody>${ups.map((u) => `<tr><td>${esc(u.name)}</td><td>${new Date(u.at).toLocaleString('en-GB')}</td><td>${esc(u.by)}</td><td>${dmy(u.first)} – ${dmy(u.last)}</td><td>${u.added}</td><td>${u.already}</td>${cell(u.settlement, 2)}</tr>`).join('')}</tbody>` : '';
+  $('uploads').innerHTML = ups.length ? `<thead><tr><th>File</th><th>When</th><th>Who</th><th>Orders</th><th>New statements</th><th>Already loaded</th><th>Settlement added</th></tr></thead><tbody>${ups.map((u) => `<tr><td>${esc(u.name)}</td><td data-v="${u.at}">${new Date(u.at).toLocaleString('en-GB')}</td><td>${esc(u.by)}</td><td data-v="${u.first || ''}">${dmy(u.first)} – ${dmy(u.last)}</td><td>${u.added}</td><td>${u.already}</td>${cell(u.settlement, 2)}</tr>`).join('')}</tbody>` : '';
+  sortTable('uploads');
 }
 
 let XLSX = null;
@@ -445,6 +486,7 @@ async function start() {
   const openBox = (sku) => { selected = sku; location.hash = '#boxes'; render(); $('box').scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   onRowClick('boxes', openBox);
   onRowClick('top', openBox);
+  sortable('top', 10); sortable('uploads'); sortable('cost-log');
   onRowClick('costs', (sku) => { if (!state.admin) return; editing = sku; renderCosts(); $('cost-edit').scrollIntoView({ behavior: 'smooth', block: 'start' }); });
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
   $('publish').addEventListener('click', publish);
