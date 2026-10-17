@@ -10,6 +10,7 @@ const int = new Intl.NumberFormat('en-GB');
 const money = (v, dp = 0) => { const s = (dp ? gbp2 : gbp0).format(Math.abs(v)); return v < -0.004 ? `−${s}` : s; };
 const cell = (v, dp = 0) => `<td${v < -0.004 ? ' class="neg"' : ''}>${money(v, dp)}</td>`;
 const pct = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–');
+const rate = (v) => (Number.isFinite(v) ? `${+(v * 100).toFixed(2)}%` : '–'); // a cost rate as entered: 15%, 5.35%
 const ratio = (a, b) => (b ? a / b : NaN);
 const dmy = (d) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
 const monthName = (m) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' });
@@ -180,7 +181,7 @@ function renderBox(sku, s, from, to) {
   const others = (info.names || []).filter((n) => n !== info.name);
   if (!b) { el.innerHTML = `<h2>${esc(boxName(sku))}</h2><p class="muted">No sales of this box in the period chosen.</p>`; return; }
   const c = costAt(state.costs.values[sku], to || '9999-12-31');
-  const unit = (k) => (c ? (COST_LINES.find((x) => x.k === k)?.pct ? pct(c[k]) : money(c[k] || 0, 2)) : '');
+  const unit = (k) => (c ? (COST_LINES.find((x) => x.k === k)?.pct ? rate(c[k]) : money(c[k] || 0, 2)) : '');
   const fees = Object.entries(b.feeLines).filter(([, v]) => Math.abs(v) >= 0.005).sort(([, a], [, b2]) => a - b2);
   const row = (label, v, note = '') => `<tr><td>${label}</td>${cell(v, 2)}<td class="muted">${note}</td></tr>`;
   el.innerHTML = `
@@ -219,6 +220,8 @@ function renderBox(sku, s, from, to) {
 
 // ---- Costs -------------------------------------------------------------------------
 let editing = null;
+// Costs table sort: null = boxes without costs first, then by name.
+let costSort = { key: null, dir: 1 };
 function renderCosts() {
   const vals = state.costs.values;
   $('costs-help').textContent = state.admin
@@ -228,18 +231,33 @@ function renderCosts() {
   // Only boxes with a sale in the period chosen (all of them for "All time").
   const [from, to] = range();
   const sold = new Set((state.data?.daily || []).filter((r) => r.u && inRange(r.d, from, to)).map((r) => r.sku));
+  const cost = new Map(Object.keys(state.data?.skus || {}).map((sku) => [sku, costAt(vals[sku], today)]));
+  const value = (sku, k) => {
+    const c = cost.get(sku);
+    if (k === 'name') return boxName(sku).toLowerCase();
+    if (k === 'first' || k === 'last') return state.spans.get(sku)?.[k] ?? null;
+    if (k === 'from') return c?.from ?? null;
+    return c ? c[k] ?? 0 : null;
+  };
+  // Boxes with no value for the column always go last, whichever way it's sorted.
+  const byKey = (a, b) => {
+    const x = value(a, costSort.key), y = value(b, costSort.key);
+    if (x == null || y == null) return (x == null) - (y == null);
+    return (typeof x === 'string' ? x.localeCompare(y) : x - y) * costSort.dir || boxName(a).localeCompare(boxName(b));
+  };
   const skus = Object.keys(state.data?.skus || {}).filter((sku) => (!from && !to) || sold.has(sku))
-    .sort((a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
+    .sort(costSort.key ? byKey : (a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
   const done = skus.filter((sku) => vals[sku]).length;
   const which = from || to ? 'boxes sold in this period' : 'boxes';
   $('costs-count').innerHTML = skus.length
-    ? `<b>${done} of ${skus.length} ${which} have costs.</b> ${done < skus.length ? `The ${skus.length - done} without are listed first; the rest follow below.` : ''}`
+    ? `<b>${done} of ${skus.length} ${which} have costs.</b> ${costSort.key ? 'Tap a heading to sort by it, again to reverse.' : done < skus.length ? `The ${skus.length - done} without are listed first; tap a heading to sort.` : 'Tap a heading to sort.'}`
     : `No ${which}.`;
-  const head = `<thead><tr><th>Box</th><th>First sale</th><th>Last sale</th>${COST_LINES.map((c) => `<th>${c.label}</th>`).join('')}<th>${MARKETING.label}</th><th>Since</th></tr></thead>`;
+  const cols = [['name', 'Box'], ['first', 'First sale'], ['last', 'Last sale'], ...[...COST_LINES, MARKETING].map((c) => [c.k, c.label]), ['from', 'Since']];
+  const head = `<thead><tr>${cols.map(([k, l]) => `<th data-k="${k}"${costSort.key === k ? ` aria-sort="${costSort.dir > 0 ? 'ascending' : 'descending'}"` : ''}>${l}</th>`).join('')}</tr></thead>`;
   $('costs').innerHTML = head + `<tbody>${skus.map((sku) => {
-    const c = costAt(vals[sku], today);
+    const c = cost.get(sku);
     return `<tr class="${state.admin ? 'click' : ''}${c ? '' : ' missing'}${sku === editing ? ' sel' : ''}" data-sku="${sku}"><td>${esc(boxName(sku))}<span class="sku">${sku}</span></td>${saleCells(sku)}
-      ${COST_KEYS.map((k) => `<td>${c ? (k === 'commission' ? pct(c[k]) : money(c[k], 2)) : '–'}</td>`).join('')}<td>${c ? dmy(c.from) : ''}</td></tr>`;
+      ${COST_KEYS.map((k) => `<td>${c ? (k === 'commission' ? rate(c[k]) : money(c[k], 2)) : '–'}</td>`).join('')}<td>${c ? dmy(c.from) : ''}</td></tr>`;
   }).join('')}</tbody>`;
   const log = (state.costs.log || []).slice(-15).reverse();
   $('cost-log-card').hidden = !log.length;
@@ -416,6 +434,10 @@ async function start() {
   addEventListener('hashchange', showTab);
   for (const id of ['period', 'from', 'to']) $(id).addEventListener('change', render);
   $('q').addEventListener('input', () => renderBoxes(summary(state.data, state.costs.values, ...range())));
+  $('costs').addEventListener('click', (e) => {
+    const th = e.target.closest('th[data-k]');
+    if (th) { costSort = { key: th.dataset.k, dir: costSort.key === th.dataset.k ? -costSort.dir : th.dataset.k === 'name' ? 1 : -1 }; renderCosts(); }
+  });
   $('boxes').addEventListener('click', (e) => {
     const th = e.target.closest('th[data-k]');
     if (th) { sort = { key: th.dataset.k, dir: sort.key === th.dataset.k ? -sort.dir : th.dataset.k === 'name' ? 1 : -1 }; render(); }
