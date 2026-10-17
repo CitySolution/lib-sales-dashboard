@@ -6,6 +6,7 @@ import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems } from '../site/js/pnl.js';
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count, withoutHidden } from '../site/js/checks.js';
+import { book, boxesSheet, periodSheet, plSheet, costHistorySheet, statementsSheet } from '../site/js/export.js';
 
 const close = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: got ${a}, expected ${b}`);
 const parse = (rows, st) => parseOrderDetails(readWorkbook(XLSX, workbook(rows, st)));
@@ -217,5 +218,25 @@ test('reads files whose declared sheet size is wrong (as TikTok\'s are)', () => 
   entry.content = Buffer.from(xml.replace(/<dimension ref="[^"]+"/, '<dimension ref="A1:DX6"'));
   const p = parseOrderDetails(readWorkbook(XLSX, XLSX.CFB.write(zip, { type: 'buffer', fileType: 'zip' })));
   assert.equal(p.rows, 7);
+});
+test('Excel downloads: real numbers and dates that add up', () => {
+  const { data } = merge(merge(null, parse(file1())).data, parse(file2()));
+  const s = summary(data, costs), name = (sku) => `Box ${sku}`;
+  const wb = book(XLSX, [['Profit and loss', plSheet(s.total, s)], ['Boxes', boxesSheet(s.boxes, name, saleDates(data))],
+    ['By day', periodSheet(byMonth(data, costs, null, null, A, 10))], ['Cost history', costHistorySheet(costs, name)], ['Statements', statementsSheet(data.statements)]]);
+  const back = XLSX.read(XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }), { cellNF: true });
+  const rows = (sheet) => XLSX.utils.sheet_to_json(back.Sheets[sheet], { header: 1, raw: true });
+  const pl = new Map(rows('Profit and loss').map(([k, v]) => [k, v]));
+  close(pl.get('Net profit after all costs'), s.overall, 'P&L total');
+  close(pl.get('  Logistics reimbursement'), 34, 'shop item line');
+  assert.equal(back.Sheets['Profit and loss'].B2.w, `£${(s.total.revInc).toLocaleString('en-GB', { minimumFractionDigits: 2 })}`, 'shown as £');
+  const boxes = rows('Boxes');
+  assert.deepEqual(Array.from(boxes[0].slice(0, 4)), ['Box', 'SKU', 'First sale', 'Last sale']);
+  const a = boxes.find((r) => r[1] === A);
+  assert.equal(back.Sheets.Boxes[`C${boxes.indexOf(a) + 1}`].w, '08/01/2026', 'first sale is a date');
+  close(a[boxes[0].indexOf('Net profit')], s.boxes.get(A).net, 'box net profit');
+  close(rows('By day').slice(1).reduce((x, r) => x + r[13], 0), s.boxes.get(A).net, 'days add up to the box');
+  assert.equal(rows('Cost history').length, 1 + Object.values(costs).flat().length);
+  assert.equal(rows('Statements').length, 1 + Object.keys(data.statements).length);
 });
 console.log(`${n} data tests passed`);

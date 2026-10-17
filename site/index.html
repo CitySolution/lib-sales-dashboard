@@ -55,18 +55,18 @@
       <div class="warn" id="uncosted" hidden></div>
       <div class="tiles" id="tiles"></div>
       <div class="card">
-        <div class="ctrl"><h2>Month by month</h2><span class="legend" id="legend"></span></div>
+        <div class="ctrl"><h2>Month by month</h2><span class="legend" id="legend"></span><button class="btn ghost xl" data-xlsx="chart">Excel</button></div>
         <div class="chart" id="chart"></div>
       </div>
       <div class="grid2">
         <div class="card">
-          <h2>Top 10 boxes</h2>
+          <div class="ctrl"><h2>Top 10 boxes</h2><button class="btn ghost xl" data-xlsx="top">Excel</button></div>
           <p class="muted small">By net profit; tap a heading to rank by something else.</p>
           <div class="tablewrap"><table class="t" id="top"></table></div>
           <a href="#boxes" class="more">All boxes →</a>
         </div>
         <div class="card">
-          <h2>Profit and loss</h2>
+          <div class="ctrl"><h2>Profit and loss</h2><button class="btn ghost xl" data-xlsx="pl">Excel</button></div>
           <table class="t pl" id="pl"></table>
           <p class="muted small">Other TikTok items are reimbursements and chargebacks on each box's orders, and its share of the FBT warehouse fee (each month's fee shared across the boxes sold that month). Shop-level items are the rest: anything whose order isn't in the uploaded files, and warehouse fees for a month with no sales. Bill payments (topping up a negative balance) aren't income or costs and are left out.</p>
         </div>
@@ -77,32 +77,32 @@
     <section class="view" id="v-attention" hidden>
       <div class="card" id="att-none" hidden><h2>Nothing needs attention</h2><p class="muted">No problems found in the data, or in the boxes sold in this period.</p></div>
       <div class="card" id="att-data" hidden>
-        <h2>Data</h2>
+        <div class="ctrl"><h2>Data</h2><button class="btn ghost xl" data-xlsx="att-data">Excel</button></div>
         <p class="muted small">Checked across everything loaded, whatever the period.</p>
         <div id="att-data-list" class="attlist"></div>
       </div>
       <div class="card" id="att-costs-card" hidden>
-        <h2>No costs entered</h2>
+        <div class="ctrl"><h2>No costs entered</h2><button class="btn ghost xl" data-xlsx="att-costs">Excel</button></div>
         <p class="muted small">Their profit is overstated until costs are entered. Biggest sellers first; tap one to enter its costs.</p>
         <div class="tablewrap"><table class="t" id="att-costs"></table></div>
       </div>
       <div class="card" id="att-loss-card" hidden>
-        <h2>Losing money</h2>
+        <div class="ctrl"><h2>Losing money</h2><button class="btn ghost xl" data-xlsx="att-loss">Excel</button></div>
         <p class="muted small">Net profit below zero in this period, after TikTok fees and costs.</p>
         <div class="tablewrap"><table class="t" id="att-loss"></table></div>
       </div>
       <div class="card" id="att-margin-card" hidden>
-        <h2>Low margin</h2>
+        <div class="ctrl"><h2>Low margin</h2><button class="btn ghost xl" data-xlsx="att-margin">Excel</button></div>
         <p class="muted small" id="att-margin-help"></p>
         <div class="tablewrap"><table class="t" id="att-margin"></table></div>
       </div>
       <div class="card" id="att-refunds-card" hidden>
-        <h2>High refunds</h2>
+        <div class="ctrl"><h2>High refunds</h2><button class="btn ghost xl" data-xlsx="att-refunds">Excel</button></div>
         <p class="muted small" id="att-refunds-help"></p>
         <div class="tablewrap"><table class="t" id="att-refunds"></table></div>
       </div>
       <div class="card" id="att-hidden-card" hidden>
-        <h2>Hidden</h2>
+        <div class="ctrl"><h2>Hidden</h2><button class="btn ghost xl" data-xlsx="att-hidden">Excel</button></div>
         <p class="muted small">Items someone has marked as fine. They come back by themselves when the date passes.</p>
         <div class="tablewrap"><table class="t" id="att-hidden"></table></div>
       </div>
@@ -112,7 +112,7 @@
     <section class="view" id="v-boxes" hidden>
       <div class="card" id="box" hidden></div>
       <div class="card">
-        <div class="ctrl"><h2>Every box</h2><input type="search" id="q" placeholder="Search box name or SKU" aria-label="Search boxes"></div>
+        <div class="ctrl"><h2>Every box</h2><input type="search" id="q" placeholder="Search box name or SKU" aria-label="Search boxes"><button class="btn ghost xl" data-xlsx="boxes">Excel</button></div>
         <div class="tablewrap"><table class="t sortable" id="boxes"></table></div>
         <p class="muted small">Click a box for its full profit and loss. Boxes are tracked by TikTok SKU ID, so a renamed box keeps its history.</p>
       </div>
@@ -122,13 +122,13 @@
     <section class="view" id="v-costs" hidden>
       <div class="card" id="cost-edit" hidden></div>
       <div class="card">
-        <h2>Costs per box</h2>
+        <div class="ctrl"><h2>Costs per box</h2><button class="btn ghost xl" data-xlsx="costs">Excel</button></div>
         <p class="muted" id="costs-help"></p>
         <p id="costs-count"></p>
         <div class="tablewrap"><table class="t sortable" id="costs"></table></div>
       </div>
       <div class="card" id="cost-log-card" hidden>
-        <h2>Recent changes</h2>
+        <div class="ctrl"><h2>Recent changes</h2><button class="btn ghost xl" data-xlsx="cost-log">Excel</button></div>
         <div class="tablewrap"><table class="t" id="cost-log"></table></div>
       </div>
     </section>
@@ -151,7 +151,7 @@
         <div id="preview"></div>
       </div>
       <div class="card">
-        <h2>What's loaded</h2>
+        <div class="ctrl"><h2>What's loaded</h2><button class="btn ghost xl" data-xlsx="uploads">Excel</button></div>
         <div id="loaded"></div>
         <div class="tablewrap"><table class="t" id="uploads"></table></div>
       </div>

@@ -197,18 +197,19 @@ export function summary(data, costs, from, to) {
 }
 
 // Per month (YYYY-MM) in a range, for trends: Map month -> summary-like totals.
-export function byMonth(data, costs, from, to, sku = null) {
+// `len` 10 gives it per day (YYYY-MM-DD) instead.
+export function byMonth(data, costs, from, to, sku = null, len = 7) {
   const out = new Map(), rates = warehouseRates(data);
   for (const row of data?.daily || []) {
     if (!inRange(row.d, from, to) || (sku && row.sku !== sku)) continue;
-    const m = row.d.slice(0, 7);
+    const m = row.d.slice(0, len);
     const t = out.get(m) || out.set(m, { ...blank(), shopTotal: 0 }).get(m);
     add(t, row, costs?.[row.sku], rates);
   }
   if (!sku) {
     for (const r of data?.adj || []) {
       if (!inRange(r.d, from, to) || !shopLevel(r, rates)) continue;
-      const m = r.d.slice(0, 7);
+      const m = r.d.slice(0, len);
       const t = out.get(m) || out.set(m, { ...blank(), shopTotal: 0 }).get(m);
       t.shopTotal += r.a;
     }

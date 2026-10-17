@@ -1,7 +1,8 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
 import { summary, byMonth, assemble, saleDates, inRange, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
-import { attention, withoutHidden, count as attCount, LIMITS } from './checks.js';
+import { attention, withoutHidden, count as attCount, LIMITS, GROUPS } from './checks.js';
+import { book, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet } from './export.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -227,7 +228,7 @@ function renderBox(sku, s, from, to) {
   const fees = Object.entries(b.feeLines).filter(([, v]) => Math.abs(v) >= 0.005).sort(([, a], [, b2]) => a - b2);
   const row = (label, v, note = '') => `<tr><td>${label}</td>${cell(v, 2)}<td class="muted">${note}</td></tr>`;
   el.innerHTML = `
-    <div class="ctrl"><div><p class="eyebrow">SKU ${sku}</p><h2>${esc(boxName(sku))}</h2></div><button class="btn ghost" id="box-close">Close</button></div>
+    <div class="ctrl"><div><p class="eyebrow">SKU ${sku}</p><h2>${esc(boxName(sku))}</h2></div><div><button class="btn ghost xl" data-xlsx="box">Excel</button> <button class="btn ghost" id="box-close">Close</button></div></div>
     ${others.length ? `<p class="muted small">Also sold as:</p><ul class="names muted small">${others.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
     ${b.uncosted ? '<div class="warn">No costs entered for this box, so its profit is overstated. <a href="#costs">Enter costs</a>.</div>' : ''}
     <div class="tiles">
@@ -301,6 +302,7 @@ function renderAttention(from, to) {
 let editing = null;
 // Costs table sort: null = boxes without costs first, then by name.
 let costSort = { key: null, dir: 1 };
+let costSkus = []; // the boxes on the Costs page, as listed
 function renderCosts() {
   const vals = state.costs.values;
   $('costs-help').textContent = state.admin
@@ -326,6 +328,7 @@ function renderCosts() {
   };
   const skus = Object.keys(state.data?.skus || {}).filter((sku) => (!from && !to) || sold.has(sku))
     .sort(costSort.key ? byKey : (a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
+  costSkus = skus;
   const done = skus.filter((sku) => vals[sku]).length;
   const which = from || to ? 'boxes sold in this period' : 'boxes';
   $('costs-count').innerHTML = skus.length
@@ -484,6 +487,40 @@ async function loadSeed() {
   }
 }
 
+// ---- Excel downloads ---------------------------------------------------------------
+// Each card's figures for the period chosen (site/js/export.js).
+async function download(key) {
+  const [from, to] = range();
+  const D = state.data, C = state.costs.values, today = iso(ukToday());
+  const s = summary(D, C, from, to);
+  const boxes = () => ['Boxes', boxesSheet(s.boxes, boxName, state.spans)];
+  const months = (sku = null) => ['By month', periodSheet(byMonth(D, C, from, to, sku), !sku)];
+  const att = () => withoutHidden(attention(D, C, from, to, today), state.dismissed.values, today);
+  const group = (g) => [GROUPS[g], [[GROUPS[g], attBoxSheet(att().boxes[g], boxName)]]];
+  const sets = {
+    pl: () => ['Profit and loss', [['Profit and loss', plSheet(s.total, s)], boxes(), months()]],
+    chart: () => ['Month by month', [months()]],
+    top: () => ['Boxes', [boxes()]],
+    boxes: () => ['Boxes', [boxes()]],
+    box: () => [boxName(selected), [['Profit and loss', plSheet(s.boxes.get(selected))], months(selected), ['By day', periodSheet(byMonth(D, C, from, to, selected, 10))]]],
+    costs: () => ['Costs', [['Costs now', costsSheet(costSkus, boxName, state.spans, C, today)], ['Cost history', costHistorySheet(C, boxName)], ['Changes', costLogSheet(state.costs.log || [], boxName)]], false],
+    'cost-log': () => ['Cost changes', [['Changes', costLogSheet(state.costs.log || [], boxName)]], false],
+    'att-data': () => ['Data checks', [['Data checks', attDataSheet(att().data, boxName)]], false],
+    'att-costs': () => group('costs'),
+    'att-loss': () => group('loss'),
+    'att-margin': () => group('margin'),
+    'att-refunds': () => group('refunds'),
+    'att-hidden': () => ['Hidden', [['Hidden', hiddenSheet(att().hidden, boxName)]], false],
+    uploads: () => ['Uploads', [['Uploads', uploadsSheet(D?.uploads || [])], ['Statements', statementsSheet(D?.statements || {})]], false],
+  };
+  const [title, sheets, dated = true] = sets[key]();
+  const period = from || to ? `${from || 'start'} to ${to || 'latest'}` : 'all time';
+  await loadXlsx();
+  // Browsers drop a file name with characters like £ in it, so keep to plain ones.
+  const file = `LiB ${title}${dated ? ` ${period}` : ''}`.replace(/[^\x20-\x7e]|[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ');
+  XLSX.writeFile(book(XLSX, sheets), `${file}.xlsx`);
+}
+
 // ---- Wiring ------------------------------------------------------------------------
 function showTab() {
   const tab = (location.hash || '#summary').slice(1);
@@ -557,5 +594,9 @@ async function start() {
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
   $('publish').addEventListener('click', publish);
   $('seed-btn').addEventListener('click', loadSeed);
+  document.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-xlsx]');
+    if (btn) download(btn.dataset.xlsx).catch((err) => setStatus(err.message, true));
+  });
 }
 start();

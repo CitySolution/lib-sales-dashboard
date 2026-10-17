@@ -73,6 +73,7 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .btn { font: inherit; letter-spacing: .06em; text-transform: uppercase; font-size: 13px; padding: 10px 20px; border-radius: 999px; border: 0; background: var(--fg); color: var(--bg); cursor: pointer; }
 .btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); }
 .btn:disabled { opacity: .4; cursor: default; }
+.btn.xl { font-size: 11px; padding: 5px 12px; } /* Excel download on a card */
 .more { align-self: flex-start; }
 
 .tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
