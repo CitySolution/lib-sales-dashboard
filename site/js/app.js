@@ -225,6 +225,8 @@ function renderCosts() {
     : 'Costs that aren\'t in TikTok\'s data, per box. Only admins can change them.';
   const today = iso(ukToday());
   const skus = Object.keys(state.data?.skus || {}).sort((a, b) => (!!vals[a] - !!vals[b]) || boxName(a).localeCompare(boxName(b)));
+  const done = skus.filter((sku) => vals[sku]).length;
+  $('costs-count').innerHTML = `<b>${done} of ${skus.length} boxes have costs.</b> ${done < skus.length ? `The ${skus.length - done} without are listed first; the rest follow below.` : ''}`;
   const head = `<thead><tr><th>Box</th>${COST_LINES.map((c) => `<th>${c.label}</th>`).join('')}<th>${MARKETING.label}</th><th>Since</th></tr></thead>`;
   $('costs').innerHTML = head + `<tbody>${skus.map((sku) => {
     const c = costAt(vals[sku], today);
