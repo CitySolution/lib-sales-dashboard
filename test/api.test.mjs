@@ -142,7 +142,7 @@ await test('cost import: admins only, fills only boxes with no costs, never over
   const skus = Object.keys(seedCosts);
   assert.equal((await call(seedPost, '/api/seed', viewer, { body: { costs: true } })).status, 403);
   // One box already has costs entered by hand: it must be left alone.
-  const mine = [{ from: '2026-03-01', brand: 1, pallet: 0, packaging: 0, labour: 0, other: 0, commission: 0, commissionUnit: 0, marketing: 0 }];
+  const mine = [{ from: '2026-03-01', brand: 1, pallet: 0, packaging: 0, labour: 0, other: 0, commission: 0, marketing: 0 }];
   if (skus.length) assert.equal((await call(costsPost, '/api/costs', admin, { body: { sku: skus[0], entries: mine } })).status, 200);
   assert.equal((await call(me, '/api/me', admin)).body.seed_costs, Math.max(0, skus.length - 1));
   assert.equal((await call(me, '/api/me', viewer)).body.seed_costs, 0);
@@ -155,5 +155,20 @@ await test('cost import: admins only, fills only boxes with no costs, never over
     assert.deepEqual(c.costs.values[skus[0]], mine);
     for (const sku of skus.slice(1)) assert.deepEqual(c.costs.values[sku], seedCosts[sku]);
   }
+});
+await test('cost import: a commission stored as £ per box by the earlier version becomes a %', async () => {
+  store.clear();
+  const skus = Object.keys(seedCosts);
+  // As the earlier version stored it, before the button was pressed again.
+  const values = Object.fromEntries(skus.map((sku) => [sku, seedCosts[sku]]));
+  values['1729000000000000009'] = [{ from: '2025-01-01', brand: 2, pallet: 0, packaging: 0, labour: 0, other: 0, commission: 0, commissionUnit: 5.35, marketing: 0 }];
+  store.set('costs', JSON.stringify({ values, log: [] }));
+  assert.equal((await call(me, '/api/me', admin)).body.seed_costs, 1);
+  assert.equal((await call(seedPost, '/api/seed', admin, { body: { costs: true } })).body.costs, 1);
+  const c = (await call(me, '/api/me', admin)).body;
+  assert.equal(c.seed_costs, 0);
+  const fixed = c.costs.values['1729000000000000009'][0];
+  assert.ok(Math.abs(fixed.commission - 0.0535) < 1e-9); assert.ok(!('commissionUnit' in fixed)); assert.equal(fixed.brand, 2);
+  for (const sku of skus) assert.deepEqual(c.costs.values[sku], seedCosts[sku], 'others untouched');
 });
 console.log(`${n} API tests passed`);

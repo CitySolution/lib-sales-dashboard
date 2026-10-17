@@ -4,7 +4,9 @@
 //                    with site/js/tiktok.js. Each part is one file and goes through the
 //                    same "only new statements" storing as an upload.
 //   seed-costs.json  box costs from the original Finance Dashboard spreadsheet. Only
-//                    boxes with no costs yet are filled in; nothing is overwritten.
+//                    boxes with no costs yet are filled in; nothing else is overwritten,
+//                    except that a commission stored as £ per box by an earlier version
+//                    (`commissionUnit`) becomes the percentage it always was (5.35 -> 5.35%).
 // Loading twice changes nothing. Once loaded, set both files to [] / {}.
 import { adminJson, json, fail, HttpError } from '../_lib/auth.js';
 import { addBatch } from '../_lib/store.js';
@@ -13,12 +15,20 @@ import seedCosts from '../_lib/seed-costs.json' with { type: 'json' };
 import { sanitiseEntries } from './costs.js';
 
 export const seedPending = (index) => seed.filter((p) => Object.keys(p.statements).some((id) => !index?.statements?.[id])).length;
-export const seedCostsPending = (costs) => Object.keys(seedCosts).filter((sku) => !costs?.values?.[sku]).length;
+const perBox = (entries) => entries.some((e) => e.commissionUnit);
+export const seedCostsPending = (costs) => Object.keys(seedCosts).filter((sku) => !costs?.values?.[sku]).length
+  + Object.values(costs?.values || {}).filter(perBox).length;
 
 async function loadCosts(env, who) {
   const cur = (await env.LIB_DATA.get('costs', 'json')) || { values: {}, log: [] };
   const at = new Date().toISOString();
   let added = 0;
+  for (const [sku, entries] of Object.entries(cur.values)) {
+    if (!perBox(entries)) continue;
+    cur.values[sku] = sanitiseEntries(entries.map(({ commissionUnit, ...e }) => (commissionUnit ? { ...e, commission: commissionUnit / 100 } : e)));
+    cur.log = [...(cur.log || []), { at, by: `${who.email} (commission corrected to a %)`, sku, entries: cur.values[sku] }];
+    added++;
+  }
   for (const [sku, entries] of Object.entries(seedCosts)) {
     if (cur.values[sku]) continue;
     cur.values[sku] = sanitiseEntries(entries);

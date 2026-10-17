@@ -8,7 +8,6 @@
    "labour": 4.5,
    "other": 2.0,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -21,7 +20,6 @@
    "labour": 4.5,
    "other": 2.0,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -34,7 +32,6 @@
    "labour": 4.5,
    "other": 2.0,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -47,7 +44,6 @@
    "labour": 4.5,
    "other": 2.0,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -60,7 +56,6 @@
    "labour": 4.5,
    "other": 2.0,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -73,7 +68,6 @@
    "labour": 4.5,
    "other": 2.0,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 5.0
   }
  ],
@@ -85,8 +79,7 @@
    "packaging": 1.92,
    "labour": 2.63,
    "other": 1.35,
-   "commission": 0,
-   "commissionUnit": 5.35,
+   "commission": 0.0535,
    "marketing": 0.35
   }
  ],
@@ -99,7 +92,6 @@
    "labour": 2.63,
    "other": 0.72,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 1.0
   }
  ],
@@ -112,7 +104,6 @@
    "labour": 2.63,
    "other": 0.71,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -125,7 +116,6 @@
    "labour": 2.63,
    "other": 0.72,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -138,7 +128,6 @@
    "labour": 2.63,
    "other": 1.38,
    "commission": 0.0,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -151,7 +140,6 @@
    "labour": 2.65,
    "other": 0.72,
    "commission": 0.0,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -164,7 +152,6 @@
    "labour": 2.63,
    "other": 0.72,
    "commission": 0.0,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -176,8 +163,7 @@
    "packaging": 1.62,
    "labour": 2.64,
    "other": 1.48,
-   "commission": 0,
-   "commissionUnit": 3.21,
+   "commission": 0.0321,
    "marketing": 0
   }
  ],
@@ -190,7 +176,6 @@
    "labour": 2.63,
    "other": 0.72,
    "commission": 0.15,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -202,8 +187,7 @@
    "packaging": 1.62,
    "labour": 2.63,
    "other": 1.17,
-   "commission": 0,
-   "commissionUnit": 5.45,
+   "commission": 0.0545,
    "marketing": 0
   }
  ],
@@ -216,7 +200,6 @@
    "labour": 2.63,
    "other": 1.72,
    "commission": 0.0,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -228,8 +211,7 @@
    "packaging": 1.92,
    "labour": 2.2,
    "other": 0.64,
-   "commission": 0,
-   "commissionUnit": 2.48,
+   "commission": 0.0248,
    "marketing": 0
   }
  ],
@@ -241,8 +223,7 @@
    "packaging": 1.62,
    "labour": 2.63,
    "other": 1.12,
-   "commission": 0,
-   "commissionUnit": 4.83,
+   "commission": 0.0483,
    "marketing": 0
   }
  ],
@@ -255,7 +236,6 @@
    "labour": 2.63,
    "other": 0.78,
    "commission": 0.0,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -268,7 +248,6 @@
    "labour": 2.4,
    "other": 0.7,
    "commission": 0.0,
-   "commissionUnit": 0,
    "marketing": 0
   }
  ],
@@ -280,8 +259,7 @@
    "packaging": 1.92,
    "labour": 2.63,
    "other": 1.36,
-   "commission": 0,
-   "commissionUnit": 5.92,
+   "commission": 0.0592,
    "marketing": 0
   }
  ],
@@ -293,8 +271,7 @@
    "packaging": 2.0,
    "labour": 2.65,
    "other": 0.78,
-   "commission": 0,
-   "commissionUnit": 3.38,
+   "commission": 0.0338,
    "marketing": 0
   }
  ]
