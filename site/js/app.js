@@ -531,7 +531,8 @@ async function pickFiles() {
       const n = Object.keys(fresh.statements).length;
       if (n) pending.push({ name: f.name, fresh });
       const add = Object.values(fresh.statements).reduce((a, s) => a + s.settlement, 0);
-      cards.push(`<div class="filecard"><b>${esc(f.name)}</b><br>${int.format(parsed.rows)} rows · orders ${dmy(parsed.first)} – ${dmy(parsed.last)} · ${Object.keys(parsed.statements).length} statements:
+      const sd = Object.values(parsed.statements).map((x) => x.date).sort();
+      cards.push(`<div class="filecard"><b>${esc(f.name)}</b><br>${int.format(parsed.rows)} rows · statements ${dmy(sd[0])} – ${dmy(sd.at(-1))} (covering orders from ${dmy(parsed.first)}, as they include refunds of older orders) · ${sd.length} statements:
         <b>${n} new</b> (${money(add, 2)})${fresh.already.length ? `, ${fresh.already.length} already loaded (skipped)` : ''}</div>`);
     } catch (err) {
       cards.push(`<div class="filecard err"><b>${esc(f.name)}</b>: ${esc(err.message)}</div>`);
