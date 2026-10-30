@@ -32,6 +32,7 @@
       <a href="#prices" data-tab="prices">Prices</a>
       <a href="#costs" data-tab="costs">Costs</a>
       <a href="#uploads" data-tab="uploads">Uploads</a>
+      <a href="#access" data-tab="access" id="tab-access" hidden>Access</a>
     </nav>
 
     <section class="card filters" id="filters" hidden>
@@ -177,6 +178,19 @@
         <div class="ctrl"><h2>What's loaded</h2><button class="btn ghost xl" data-xlsx="uploads">Excel</button></div>
         <div id="loaded"></div>
         <div class="tablewrap"><table class="t" id="uploads"></table></div>
+      </div>
+    </section>
+    <!-- Access: who can change things (admins only) -->
+    <section class="view" id="v-access" hidden>
+      <div class="card">
+        <h2>Admins</h2>
+        <p class="muted">Anyone with an @citysolution.co.uk or @latestinbeauty.com email can sign in and see the dashboard. Admins can also upload figures, change box costs and targets, hide Attention items, and change who's an admin here.</p>
+        <div class="tablewrap"><table class="t" id="admins"></table></div>
+        <div class="ctrl left"><input type="email" id="new-admin" placeholder="name@latestinbeauty.com" aria-label="Email address of the new admin" autocomplete="off"><button class="btn" id="add-admin">Make admin</button><span id="access-msg" class="muted"></span></div>
+      </div>
+      <div class="card" id="access-log-card" hidden>
+        <h2>Recent changes</h2>
+        <div class="tablewrap"><table class="t" id="access-log"></table></div>
       </div>
     </section>
   </main>

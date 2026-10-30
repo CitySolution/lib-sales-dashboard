@@ -106,6 +106,7 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .track .pace { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--fg); }
 .t td.ok { color: var(--ok); }
 .targetform input { width: 6.5em; }
+#new-admin { width: 20em; max-width: 100%; }
 .t tr.pct td { color: var(--muted); font-size: 13px; } /* a margin % under its P&L line */
 .t tr.pct td.neg { color: var(--bad); }
 .t tr.missing td:first-child::after { content: " · no costs"; color: var(--warn-fg); font-size: 12px; }

@@ -1,5 +1,5 @@
 {
-  "_help": "Admins can upload TikTok files and edit box costs. Everyone else who signs in with an @citysolution.co.uk or @latestinbeauty.com email can view. To add an admin, add their email here and push.",
+  "_help": "Permanent admins (owners): they can never be removed on the dashboard's Access tab, where any admin can add or remove other admins. Everyone else who signs in with an @citysolution.co.uk or @latestinbeauty.com email can view.",
   "admins": [
     "peter@citysolution.co.uk"
   ]

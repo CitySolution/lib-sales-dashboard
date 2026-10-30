@@ -13,6 +13,7 @@ import { onRequestPost as costs } from '../functions/api/costs.js';
 import { onRequestPost as seed } from '../functions/api/seed.js';
 import { onRequestPost as dismiss } from '../functions/api/dismiss.js';
 import { onRequestPost as targets } from '../functions/api/targets.js';
+import { onRequestPost as users } from '../functions/api/users.js';
 import { readWorkbook, parseOrderDetails, onlyNew } from '../site/js/tiktok.js';
 
 const args = process.argv.slice(2);
@@ -40,7 +41,7 @@ for (const f of files) {
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 createServer(async (req, res) => {
   const url = new URL(req.url, ORIGIN);
-  const routes = { '/api/me': me, '/api/upload': upload, '/api/costs': costs, '/api/seed': seed, '/api/dismiss': dismiss, '/api/targets': targets };
+  const routes = { '/api/me': me, '/api/upload': upload, '/api/costs': costs, '/api/seed': seed, '/api/dismiss': dismiss, '/api/targets': targets, '/api/users': users };
   if (routes[url.pathname]) {
     const body = req.method === 'POST' ? await new Promise((ok) => { let b = ''; req.on('data', (c) => (b += c)); req.on('end', () => ok(b)); }) : undefined;
     const r = await call(routes[url.pathname], url.pathname, body);

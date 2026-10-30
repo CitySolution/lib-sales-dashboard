@@ -27,9 +27,14 @@ function keySet(teamDomain) {
 }
 
 export const normEmail = (e) => String(e || '').trim().toLowerCase();
-let admins;
-export function _setUsers(u) { admins = new Set((u.admins || []).map(normEmail)); }
+// Owners (users.json) are always admins and can't be removed from the dashboard, so
+// nobody can be locked out. Other admins are added and removed on the Access tab
+// (functions/api/users.js) and kept in KV under 'users': { admins: { email: { by, at } }, log }.
+let owners;
+export function _setUsers(u) { owners = new Set((u.admins || []).map(normEmail)); }
 _setUsers(users);
+export const isOwner = (email) => owners.has(email);
+export const ownerList = () => [...owners];
 export const allowedEmail = (email) => /^[^@\s]+@([^@\s]+)$/.test(email) && DOMAINS.includes(email.split('@')[1]);
 
 export async function identify(request, env) {
@@ -45,7 +50,8 @@ export async function identify(request, env) {
   }
   const email = normEmail(payload.email);
   if (!allowedEmail(email)) throw new HttpError(403, `${email || 'This account'} can't use this dashboard: it's only for ${DOMAINS.map((d) => '@' + d).join(' and ')} email addresses.`);
-  return { email, admin: admins.has(email) };
+  const added = owners.has(email) ? null : (await env.LIB_DATA?.get('users', 'json'))?.admins;
+  return { email, admin: owners.has(email) || !!added?.[email] };
 }
 
 // Admin-only changes must come from the dashboard itself, as JSON.

@@ -11,6 +11,7 @@ import { onRequestPost as costsPost } from '../functions/api/costs.js';
 import { onRequestPost as seedPost } from '../functions/api/seed.js';
 import { onRequestPost as dismissPost } from '../functions/api/dismiss.js';
 import { onRequestPost as targetsPost } from '../functions/api/targets.js';
+import { onRequestPost as usersPost } from '../functions/api/users.js';
 import seed from '../functions/_lib/seed.json' with { type: 'json' };
 import seedCosts from '../functions/_lib/seed-costs.json' with { type: 'json' };
 import { assemble, merge } from '../site/js/pnl.js';
@@ -243,5 +244,26 @@ await test('targets: admins only, validated, cleared when empty, logged', async 
   t = (await call(me, '/api/me', viewer)).body.targets;
   assert.deepEqual(Object.keys(t.values), ['2026-10']);
   assert.equal(t.log.length, 3); assert.equal(t.log[0].by, 'boss@citysolution.co.uk');
+});
+await test('access: admins add and remove admins; owners and yourself stay; logged', async () => {
+  store.clear();
+  const nort = await token('Nort@LatestInBeauty.com');
+  assert.equal((await call(me, '/api/me', nort)).body.admin, false);
+  assert.equal((await call(me, '/api/me', nort)).body.users, undefined, 'viewers don\'t see the admin list');
+  assert.equal((await call(usersPost, '/api/users', viewer, { body: { email: 'x@citysolution.co.uk', admin: true } })).status, 403);
+  for (const body of [{ email: 'someone@gmail.com', admin: true }, { email: 'nort@latestinbeauty.com' }, { email: 'boss@citysolution.co.uk', admin: false }]) {
+    assert.equal((await call(usersPost, '/api/users', admin, { body })).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await call(usersPost, '/api/users', admin, { body: { email: ' Nort@LatestInBeauty.com ', admin: true } })).status, 200);
+  assert.equal((await call(me, '/api/me', nort)).body.admin, true, 'takes effect straight away');
+  assert.equal((await call(costsPost, '/api/costs', nort, { body: { sku: A, entries: [] } })).status, 200, 'and can change things');
+  assert.equal((await call(usersPost, '/api/users', nort, { body: { email: 'nort@latestinbeauty.com', admin: false } })).status, 400, 'not yourself');
+  const u = (await call(me, '/api/me', nort)).body;
+  assert.deepEqual(u.owners, ['boss@citysolution.co.uk']); assert.deepEqual(Object.keys(u.users.admins), ['nort@latestinbeauty.com']);
+  assert.equal((await call(usersPost, '/api/users', nort, { body: { email: 'boss@citysolution.co.uk', admin: false } })).status, 400, 'owners stay');
+  assert.equal((await call(usersPost, '/api/users', admin, { body: { email: 'nort@latestinbeauty.com', admin: false } })).status, 200);
+  assert.equal((await call(me, '/api/me', nort)).body.admin, false);
+  assert.equal((await call(costsPost, '/api/costs', nort, { body: { sku: A, entries: [] } })).status, 403);
+  assert.equal(JSON.parse(store.get('users')).log.length, 2);
 });
 console.log(`${n} API tests passed`);

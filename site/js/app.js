@@ -105,6 +105,7 @@ function render() {
   renderCosts();
   renderAttention(from, to);
   renderUploads();
+  renderAccess();
 }
 
 function tile(label, value, sub = '', hero = false) {
@@ -591,6 +592,30 @@ async function loadSeed() {
   }
 }
 
+// ---- Access ------------------------------------------------------------------------
+// Admins (functions/api/users.js). Owners come from the code and can't be removed.
+function renderAccess() {
+  $('tab-access').hidden = !state.admin;
+  if (!state.admin) return;
+  const added = Object.entries(state.users.admins || {}).filter(([e]) => !state.owners.includes(e));
+  const rows = [...state.owners.map((e) => [e, null]), ...added.sort(([a], [b]) => a.localeCompare(b))];
+  $('admins').innerHTML = `<thead><tr><th>Email</th><th>Added by</th><th>When</th><th></th></tr></thead><tbody>${rows.map(([e, a]) => `<tr><td>${esc(e)}${e === state.email ? ' <span class="muted">(you)</span>' : ''}</td>
+    <td>${a ? esc(a.by) : '<span class="muted">Permanent</span>'}</td><td>${a ? new Date(a.at).toLocaleDateString('en-GB') : ''}</td>
+    <td>${a && e !== state.email ? `<button class="btn ghost xl" data-remove="${esc(e)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody>`;
+  const log = (state.users.log || []).slice(-15).reverse();
+  $('access-log-card').hidden = !log.length;
+  $('access-log').innerHTML = `<thead><tr><th>Change</th><th>When</th><th>By</th></tr></thead><tbody>${log.map((l) => `<tr><td>${esc(l.email)} ${l.admin ? 'made an admin' : 'no longer an admin'}</td><td>${new Date(l.at).toLocaleString('en-GB')}</td><td>${esc(l.by)}</td></tr>`).join('')}</tbody>`;
+}
+async function setAdmin(email, admin) {
+  $('access-msg').textContent = 'Saving…';
+  try {
+    state.users = (await api('/api/users', { email, admin })).users;
+    $('access-msg').textContent = ''; $('new-admin').value = '';
+    renderAccess();
+    setStatus(admin ? `${email} is now an admin. They may need to refresh the page.` : `${email} is no longer an admin.`);
+  } catch (err) { $('access-msg').textContent = err.message; }
+}
+
 // ---- Excel downloads ---------------------------------------------------------------
 // Each card's figures for the period chosen (site/js/export.js).
 async function download(key) {
@@ -631,7 +656,7 @@ async function download(key) {
 // ---- Wiring ------------------------------------------------------------------------
 function showTab() {
   const tab = (location.hash || '#summary').slice(1);
-  const known = ['summary', 'attention', 'boxes', 'prices', 'costs', 'uploads'].includes(tab) ? tab : 'summary';
+  const known = ['summary', 'attention', 'boxes', 'prices', 'costs', 'uploads', ...(state?.admin ? ['access'] : [])].includes(tab) ? tab : 'summary';
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== `v-${known}`; });
   document.querySelectorAll('#tabs a').forEach((a) => (a.dataset.tab === known ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
   $('filters').hidden = !['summary', 'attention', 'boxes', 'prices', 'costs'].includes(known);
@@ -704,6 +729,12 @@ async function start() {
   $('files').addEventListener('change', () => pickFiles().catch((err) => setStatus(err.message, true)));
   $('publish').addEventListener('click', publish);
   $('seed-btn').addEventListener('click', loadSeed);
+  $('add-admin').addEventListener('click', () => setAdmin($('new-admin').value.trim().toLowerCase(), true));
+  $('new-admin').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('add-admin').click(); });
+  $('admins').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-remove]');
+    if (b && confirm(`Remove ${b.dataset.remove} as an admin? They'll still be able to view the dashboard.`)) setAdmin(b.dataset.remove, false);
+  });
   document.addEventListener('click', (e) => {
     const btn = e.target.closest('[data-xlsx]');
     if (btn) download(btn.dataset.xlsx).catch((err) => setStatus(err.message, true));
