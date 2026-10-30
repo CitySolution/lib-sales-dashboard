@@ -599,9 +599,12 @@ function renderAccess() {
   if (!state.admin) return;
   const added = Object.entries(state.users.admins || {}).filter(([e]) => !state.owners.includes(e));
   const rows = [...state.owners.map((e) => [e, null]), ...added.sort(([a], [b]) => a.localeCompare(b))];
-  $('admins').innerHTML = `<thead><tr><th>Email</th><th>Added by</th><th>When</th><th></th></tr></thead><tbody>${rows.map(([e, a]) => `<tr><td>${esc(e)}${e === state.email ? ' <span class="muted">(you)</span>' : ''}</td>
-    <td>${a ? esc(a.by) : '<span class="muted">Permanent</span>'}</td><td>${a ? new Date(a.at).toLocaleDateString('en-GB') : ''}</td>
-    <td>${a && e !== state.email ? `<button class="btn ghost xl" data-remove="${esc(e)}">Remove</button>` : ''}</td></tr>`).join('')}</tbody>`;
+  const label = (k, t) => `<span class="role ${k}" title="${t}">${k[0].toUpperCase() + k.slice(1)}</span>`;
+  $('admins').innerHTML = `<thead><tr><th>Email</th><th>Access</th><th>Added by</th><th>When</th><th></th></tr></thead><tbody>${rows.map(([e, a]) => `<tr><td>${esc(e)}${e === state.email ? ' <span class="muted">(you)</span>' : ''}</td>
+    <td>${a ? label('admin', 'Can view and change everything') : label('owner', 'A permanent admin: can\'t be removed here')}</td>
+    <td>${a ? esc(a.by) : '<span class="muted">Set up with the dashboard</span>'}</td><td>${a ? new Date(a.at).toLocaleDateString('en-GB') : ''}</td>
+    <td>${a && e !== state.email ? `<button class="btn ghost xl" data-remove="${esc(e)}">Remove</button>` : ''}</td></tr>`).join('')}
+    <tr><td class="muted">Everyone else @citysolution.co.uk or @latestinbeauty.com</td><td>${label('viewer', 'Can view the dashboard and download Excel, but not change anything')}</td><td colspan="3"></td></tr></tbody>`;
   const log = (state.users.log || []).slice(-15).reverse();
   $('access-log-card').hidden = !log.length;
   $('access-log').innerHTML = `<thead><tr><th>Change</th><th>When</th><th>By</th></tr></thead><tbody>${log.map((l) => `<tr><td>${esc(l.email)} ${l.admin ? 'made an admin' : 'no longer an admin'}</td><td>${new Date(l.at).toLocaleString('en-GB')}</td><td>${esc(l.by)}</td></tr>`).join('')}</tbody>`;

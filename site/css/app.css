@@ -107,6 +107,11 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .t td.ok { color: var(--ok); }
 .targetform input { width: 6.5em; }
 #new-admin { width: 20em; max-width: 100%; }
+/* Access levels on the Access tab */
+.role { display: inline-block; font-size: 12px; letter-spacing: .04em; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--line); white-space: nowrap; }
+.role.owner { background: var(--fg); color: var(--bg); border-color: var(--fg); }
+.role.admin { background: var(--blush); color: var(--brand-ink); border-color: transparent; }
+.role.viewer { color: var(--muted); }
 .t tr.pct td { color: var(--muted); font-size: 13px; } /* a margin % under its P&L line */
 .t tr.pct td.neg { color: var(--bad); }
 .t tr.missing td:first-child::after { content: " · no costs"; color: var(--warn-fg); font-size: 12px; }
