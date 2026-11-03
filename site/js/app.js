@@ -666,8 +666,11 @@ function renderShopify() {
   $('shop-loaded').innerHTML = ms.length ? `<h3>Shopify</h3><p>${ms.length} month${ms.length > 1 ? 's' : ''} loaded, ${monthLong(ms[0])} to ${monthLong(ms.at(-1))}: net sales ${money(ms.reduce((a, m) => a + idx.months[m].net, 0), 2)} (ex VAT).</p>` : '';
   $('shop-months').innerHTML = ms.length ? `<thead><tr><th>Month</th><th>Figures</th><th>Box rows</th><th>Net sales</th><th>File</th><th>Uploaded</th><th>By</th></tr></thead><tbody>${ms.slice().reverse().map((m) => { const x = idx.months[m]; return `<tr><td data-v="${m}">${monthLong(m)}</td><td>${x.monthly ? 'Monthly' : 'Daily'}</td><td>${x.rows}</td>${cell(x.net, 2)}<td>${esc(x.file)}</td><td data-v="${x.at}">${new Date(x.at).toLocaleString('en-GB')}</td><td>${esc(x.by)}</td></tr>`; }).join('')}</tbody>` : '';
   const boxes = shopBoxes(), saved = state.skumap.values;
-  $('skumap-card').hidden = !boxes.length;
-  if (!boxes.length) return;
+  if (!boxes.length) {
+    $('skumap-help').textContent = 'Once Shopify figures are added (above), each Shopify box in them is listed here to match to its TikTok box.';
+    $('skumap').innerHTML = ''; $('skumap-actions').hidden = true;
+    return;
+  }
   const tt = tiktokBoxes(), todo = boxes.filter((b) => !(b.sku in saved)).length;
   $('skumap-help').textContent = `The same box has different names and SKUs on Shopify and TikTok. Choose each Shopify box's TikTok box, so their sales count as one box with one set of costs; a box only sold on Shopify stays a box of its own (enter its costs on the Costs tab).${todo ? ` ${todo} not checked yet: suggestions are pre-filled from the names, so check them before saving.` : ''}`;
   const opt = (sel) => `<option value="">Not on TikTok: a Shopify box of its own</option>${tt.map(([k, , last]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(state.full.skus[k].name)}${last ? ` (last sold ${dmy(last)})` : ''}</option>`).join('')}`;
