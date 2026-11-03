@@ -795,10 +795,10 @@ async function download(key) {
 // ---- Wiring ------------------------------------------------------------------------
 function showTab() {
   const tab = (location.hash || '#summary').slice(1);
-  const known = ['summary', 'attention', 'boxes', 'prices', 'costs', 'uploads', ...(state?.admin ? ['access'] : [])].includes(tab) ? tab : 'summary';
+  const known = ['summary', 'attention', 'boxes', 'prices', 'targets', 'costs', 'uploads', ...(state?.admin ? ['access'] : [])].includes(tab) ? tab : 'summary';
   document.querySelectorAll('.view').forEach((v) => { v.hidden = v.id !== `v-${known}`; });
   document.querySelectorAll('#tabs a').forEach((a) => (a.dataset.tab === known ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current')));
-  $('filters').hidden = !['summary', 'attention', 'boxes', 'prices', 'costs'].includes(known);
+  $('filters').hidden = !['summary', 'attention', 'boxes', 'prices', 'targets', 'costs'].includes(known);
 }
 
 async function load() {

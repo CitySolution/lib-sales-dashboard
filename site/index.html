@@ -30,6 +30,7 @@
       <a href="#attention" data-tab="attention">Attention <span class="badge" id="att-badge" hidden></span></a>
       <a href="#boxes" data-tab="boxes">Boxes</a>
       <a href="#prices" data-tab="prices">Prices</a>
+      <a href="#targets" data-tab="targets">Targets</a>
       <a href="#costs" data-tab="costs">Costs</a>
       <a href="#uploads" data-tab="uploads">Uploads</a>
       <a href="#access" data-tab="access" id="tab-access" hidden>Access</a>
@@ -64,13 +65,6 @@
       <div class="warn" id="shop-pending" hidden></div>
       <div class="warn" id="uncosted" hidden></div>
       <div class="tiles" id="tiles"></div>
-      <div class="card" id="targets-card">
-        <div class="ctrl"><h2 id="targets-title">Targets</h2><div><button class="btn ghost xl" data-xlsx="targets">Excel</button> <button class="btn ghost xl" id="targets-set" hidden>Set targets</button></div></div>
-        <div id="target-bars" class="tbars"></div>
-        <div class="tablewrap"><table class="t" id="targets"></table></div>
-        <p class="muted small" id="targets-help"></p>
-      </div>
-      <div class="card" id="target-edit" hidden></div>
       <div class="card">
         <div class="ctrl"><h2>Month by month</h2><span class="legend" id="legend"></span><button class="btn ghost xl" data-xlsx="chart">Excel</button></div>
         <div class="chart" id="chart"></div>
@@ -148,6 +142,17 @@
         <div class="tablewrap"><table class="t" id="price-boxes"></table></div>
       </div>
       <p class="muted small">Prices include VAT, as customers see them, averaged over boxes sold (including any later refunded or cancelled). Discounts are LiB's own (TikTok's "seller discount"); discounts TikTok funds itself aren't in its export, and co-funded promotions are under TikTok fees. Discounts given are net of those refunded.</p>
+    </section>
+
+    <!-- Targets: monthly targets against what was achieved; admins set them here -->
+    <section class="view" id="v-targets" hidden>
+      <div class="card" id="targets-card">
+        <div class="ctrl"><h2 id="targets-title">Targets</h2><div><button class="btn ghost xl" data-xlsx="targets">Excel</button> <button class="btn ghost xl" id="targets-set" hidden>Set targets</button></div></div>
+        <div id="target-bars" class="tbars"></div>
+        <div class="tablewrap"><table class="t" id="targets"></table></div>
+        <p class="muted small" id="targets-help"></p>
+      </div>
+      <div class="card" id="target-edit" hidden></div>
     </section>
 
     <!-- Costs -->
