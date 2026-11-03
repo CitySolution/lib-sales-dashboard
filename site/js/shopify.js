@@ -3,13 +3,16 @@
 // the per-box rows the dashboard stores. Runs in the browser and in the tests.
 //
 // The report has no statements to tell old from new, so each upload replaces the
-// months it contains (functions/api/shopify.js). A box is a row with a box SKU
-// (LIB_COLL_…) or any sales; the £0 rows are a box's contents, free gifts and the like.
-// Rows with no product (gift cards, custom items) aren't box sales and are left out.
+// months it contains (functions/api/shopify.js). A box is a product in Shopify's BOXES
+// collection, or with a box SKU (LIB_COLL_…: older boxes have left the collection), or
+// anything else with sales. The items of a build-your-own box (SKUs BYOB26_…, each sold
+// at its own price) count as one box, "BYOB26". The £0 rows are a box's contents, free
+// gifts and the like. Rows with no product (gift cards, custom items) are left out.
 
 const NEED = ['Product title', 'Product variant SKU', 'Net items sold', 'Gross sales', 'Discounts', 'Sales reversals', 'Net sales'];
 const MONEY = { gs: 'Gross sales', sd: 'Discounts', gsr: 'Sales reversals', net: 'Net sales', tax: 'Taxes', ship: 'Shipping charges' };
 const isBox = (sku) => /^LIB_COLL/i.test(sku);
+const BYOB = /^(BYOB\d*)_/i;
 const num = (v) => { const n = Number(String(v ?? '').replace(/[£,\s]/g, '')); return Number.isFinite(n) ? n : 0; };
 const r2 = (v) => Math.round(v * 100) / 100;
 // A date as Shopify exports it (2026-01-01), or as Excel saves it after opening the
@@ -40,13 +43,18 @@ export function parseShopify(XLSX, buffer, name = '') {
     const get = (h) => (h in col ? r[col[h]] : '');
     const d = isoDate(get(dateCol));
     if (!d) continue;
-    const sku = String(get('Product variant SKU')).trim(), title = String(get('Product title')).replace(/\s+/g, ' ').trim();
+    let sku = String(get('Product variant SKU')).trim(), title = String(get('Product title')).replace(/\s+/g, ' ').trim();
+    const inBoxes = String(get('Product collection')).trim().toUpperCase() === 'BOXES', byob = BYOB.exec(sku);
+    if (byob) { sku = byob[1].toUpperCase(); title = `Build your own box (${sku})`; }
     const row = { d: dateCol === 'Month' ? `${d.slice(0, 7)}-01` : d, sku, title, n: num(get('Net items sold')) };
     for (const [k, h] of Object.entries(MONEY)) row[k] = r2(num(get(h)));
     if (!sku && !title) { skipped.noProduct += row.n; skipped.noProductNet = r2(skipped.noProductNet + row.net); continue; }
-    if (!isBox(sku) && !row.gs && !row.net && !row.gsr) { skipped.contents++; continue; }
+    // Shopify's test products (TEST_…) are left out with the contents.
+    if ((!inBoxes && !isBox(sku) && !row.gs && !row.net && !row.gsr) || /^TEST[_ ]/i.test(title)) { skipped.contents++; continue; }
     if (!sku) continue;
-    (months[row.d.slice(0, 7)] ||= []).push(row);
+    const list = (months[row.d.slice(0, 7)] ||= []), same = list.find((x) => x.d === row.d && x.sku === row.sku);
+    if (!same) { list.push(row); continue; }
+    same.n += row.n; for (const k of Object.keys(MONEY)) same[k] = r2(same[k] + row[k]);
   }
   // Every LiB box has a LIB_COLL SKU: a file without any is from another shop.
   if (!Object.values(months).flat().some((r) => isBox(r.sku))) throw new Error('There are no Latest in Beauty boxes in this file (no SKUs starting LIB_COLL), so it looks like another shop\'s report. In Shopify, check the store name at the bottom left is Latest in Beauty, then export again.');
@@ -93,19 +101,34 @@ export function withShopify(data, shop, map = {}) {
   return out;
 }
 
-// The TikTok box most likely to be the same as a Shopify one, by the share of the
-// Shopify name's words found in the TikTok name, then the most recently sold - a
-// suggestion for the mapping, which someone then checks and saves.
-// candidates: [[sku, names, lastSale]].
-const STOP = new Set(['the', 'and', 'with', 'for', 'box', 'boxes', 'beauty', 'bundle', 'worth', 'over', 'almost', 'edition', 'edit', 'kit', 'lib', 'collection', 'vol', 'from', 'tiktok', 'exclusive']);
+// The TikTok box most likely to be the same as a Shopify one - a suggestion for the
+// mapping, which someone then checks and saves. Scored by the share of the Shopify
+// name's words found in the TikTok name, plus a little when the two were selling in
+// the same months or share an edition number, and less when their years differ (2025's
+// advent calendar isn't 2026's); edition numbers (Vol 3, #6, Edition 2) mustn't clash.
+// Only boxes that have sold are suggested (not free gifts). Ties go to the most recent.
+// shop: { title, sku, first, last } (first/last: YYYY-MM); candidates: [[sku, names, last, first]].
+const STOP = new Set(['the', 'and', 'with', 'for', 'box', 'boxes', 'beauty', 'bundle', 'worth', 'over', 'almost', 'edition', 'edit', 'kit', 'lib', 'collection', 'vol', 'volume', 'from', 'tiktok', 'exclusive']);
 const words = (s) => new Set(String(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter((w) => w.length > 2 && !STOP.has(w) && !/^\d+$/.test(w)));
-export function suggest(title, candidates) {
-  const a = words(title);
+const editions = (s) => new Set([...String(s).toLowerCase().matchAll(/(?:vol(?:ume)?|edition|ed|no|part)\.?\s*#?\s*(\d+)|#\s*(\d+)/g)].map((m) => m[1] || m[2]));
+const yearOf = (s) => /\b20(2\d)\b/.exec(String(s))?.[1] || null;
+const skuYear = (sku) => /[A-Z_](2[0-9])(?=_|$)/.exec(String(sku).replace(/^LIB_COLL_/, '_'))?.[1] || null;
+export function suggest(shop, candidates) {
+  const { title, sku = '', first = '', last: shopLast = '' } = typeof shop === 'string' ? { title: shop } : shop;
+  const a = words(title), ed = editions(title), year = yearOf(title) || skuYear(sku);
   let best = null;
-  for (const [sku, names, last = ''] of candidates) {
+  for (const [tsku, names, last = '', tfirst = ''] of candidates) {
+    if (!last) continue;
     for (const n of names) {
-      const b = words(n), shared = [...a].filter((w) => b.has(w)).length, score = a.size ? shared / a.size : 0;
-      if (score >= 0.5 && (!best || score > best.score || (score === best.score && last > best.last))) best = { sku, score, last };
+      const ted = editions(n);
+      if (ed.size && ted.size && ![...ed].some((x) => ted.has(x))) continue;
+      const b = words(n), shared = [...a].filter((w) => b.has(w)).length, base = a.size ? shared / a.size : 0;
+      if (base < 0.5) continue;
+      const tyear = yearOf(n) || (tfirst ? tfirst.slice(2, 4) : null);
+      const overlap = first && tfirst && tfirst.slice(0, 7) <= (shopLast || first) && last.slice(0, 7) >= first;
+      const sameEd = ed.size && [...ed].some((x) => ted.has(x));
+      const score = base + (overlap ? 0.3 : 0) + (sameEd ? 0.3 : 0) - (year && tyear && year !== tyear ? 0.6 : 0);
+      if (score >= 0.5 && (!best || score > best.score || (score === best.score && last > best.last))) best = { sku: tsku, score, last };
     }
   }
   return best?.sku || null;

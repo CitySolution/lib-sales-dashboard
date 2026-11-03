@@ -664,7 +664,7 @@ function shopBoxes() {
   for (const [m, rows] of Object.entries(state.shopify?.months || {}).sort()) {
     for (const r of rows) {
       const b = out.get(r.sku) || out.set(r.sku, { sku: r.sku, n: 0, net: 0 }).get(r.sku);
-      b.title = r.title; b.n += r.n; b.net += r.net; b.last = m;
+      b.title = r.title; b.n += r.n; b.net += r.net; b.last = m; b.first ||= m;
     }
   }
   return [...out.values()].sort((a, b) => b.net - a.net);
@@ -672,7 +672,7 @@ function shopBoxes() {
 const tiktokBoxes = () => {
   const spans = saleDates(channel(state.full, 'tiktok'));
   return Object.entries(state.full?.skus || {}).filter(([k]) => /^\d+$/.test(k))
-    .map(([k, v]) => [k, v.names, spans.get(k)?.last || '']).sort((a, b) => b[2].localeCompare(a[2]) || state.full.skus[a[0]].name.localeCompare(state.full.skus[b[0]].name));
+    .map(([k, v]) => [k, v.names, spans.get(k)?.last || '', spans.get(k)?.first || '']).sort((a, b) => b[2].localeCompare(a[2]) || state.full.skus[a[0]].name.localeCompare(state.full.skus[b[0]].name));
 };
 function renderShopify() {
   const idx = state.shopify?.index, ms = Object.keys(idx?.months || {}).sort();
@@ -693,7 +693,7 @@ function renderShopify() {
   const opt = (sel) => `<option value="">Not on TikTok: a Shopify box of its own</option>${tt.map(([k, , last]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(state.full.skus[k].name)}${last ? ` (last sold ${dmy(last)})` : ''}</option>`).join('')}`;
   // The TikTok box goes under the Shopify one, so it's in view on a phone.
   $('skumap').innerHTML = `<thead><tr><th>Shopify box, and the same box on TikTok</th><th>Sold</th><th>Net sales</th></tr></thead><tbody>${boxes.map((b) => {
-    const has = b.sku in saved, sel = has ? saved[b.sku] || '' : suggest(b.title, tt) || '';
+    const has = b.sku in saved, sel = has ? saved[b.sku] || '' : suggest(b, tt) || '';
     return `<tr><td>${esc(b.title)}<span class="sku">${esc(b.sku)}</span>${has ? '' : '<span class="sku new">Not checked yet</span>'}
       <select class="skumap" data-sku="${esc(b.sku)}" aria-label="TikTok box for ${esc(b.title)}"${state.admin ? '' : ' disabled'}>${opt(sel)}</select></td><td>${int.format(b.n)}</td>${cell(b.net)}</tr>`;
   }).join('')}</tbody>`;

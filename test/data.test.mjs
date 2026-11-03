@@ -280,6 +280,23 @@ test('Shopify: boxes kept, their £0 contents and no-product sales left out', ()
   assert.equal(isoDate('01/02/2026'), '2026-02-01'); assert.equal(isoDate('13/13/26'), null);
 });
 
+test('Shopify: the BOXES collection; build-your-own items as one box; test products left out', () => {
+  const csv = [
+    '"Product title","Product variant title","Product variant SKU","Month","Year","Product collection","Net items sold","Gross sales","Discounts","Sales reversals","Net sales","Taxes","Total sales"',
+    '"NEW BOX","Default Title","NEWBOX1","2026-08-01","2026-01-01","BOXES",2,100,0,0,100,20,120',
+    '"OLD BOX","Default Title","LIB_COLL_OLD","2026-08-01","2026-01-01",,1,40,0,0,40,8,48',
+    '"Salon 64 - Shine Conditioner","Default Title","BYOB26_D1_006423","2026-08-01","2026-01-01",,10,30,-3,0,27,5.4,32.4',
+    '"Guinot - Lip Perfect","Default Title","BYOB26_D2_006288","2026-08-01","2026-01-01",,5,20,0,0,20,4,24',
+    '"TEST_Glow Mask","Default Title","BA_TEST_1","2026-08-01","2026-01-01",,1,10,0,-10,0,0,0',
+    '"Rodial - Bee Venom (NBT3_002530)","Default Title","NBT3_002530","2026-08-01","2026-01-01",,3,0,0,0,0,0,0',
+  ].join('\n');
+  const p = parseShopify(XLSX, new TextEncoder().encode(csv), 'x - 2026-08-01 - 2026-08-31.csv');
+  const rows = p.months['2026-08'];
+  assert.deepEqual(rows.map((r) => r.sku), ['NEWBOX1', 'LIB_COLL_OLD', 'BYOB26'], 'a BOXES box without a LIB_COLL SKU still counts');
+  assert.deepEqual({ ...rows[2] }, { d: '2026-08-01', sku: 'BYOB26', title: 'Build your own box (BYOB26)', n: 15, gs: 50, sd: -3, gsr: 0, net: 47, tax: 9.4, ship: 0 });
+  assert.equal(p.skipped.contents, 2, 'the test product and the £0 contents');
+});
+
 test('Shopify: net revenue as Shopify says; a matched box is one box; no TikTok warehouse share', () => {
   const tik = merge(merge(null, parse(file1())).data, parse(file2())).data;
   const shop = asStored(shopParse());
@@ -304,6 +321,13 @@ test('Shopify: suggests the TikTok box with the same name words, newest first', 
   assert.equal(suggest('THE GROOMING KIT - ADVENT EDITION 2026', c), '2');
   assert.equal(suggest('TEEN KIND. THE FRESH START BEAUTY KIT', c), '3');
   assert.equal(suggest('MYSTERY BOX #6', c), null);
+  // Edition numbers and years tell boxes apart; free gifts (never sold) aren't offered.
+  const e = [['10', ['The CEW 2026 Beauty Awards Beauty Box'], '2026-08-28', '2026-07-06'], ['11', ['Edition #2 CEW 2026 Beauty Awards Beauty Box'], '2026-08-06', '2026-07-21'],
+    ['12', ['The Beauty Advent Calendar with Stylist'], '2025-11-30', '2025-11-23'], ['13', ['The LiB X Stylist Beauty Advent Calendar'], '2026-10-24', '2026-10-08'], ['14', ['Gift with Purchase for the Stylist Beauty Advent Calendar'], '', '']];
+  assert.equal(suggest({ title: 'EDITION 2: THE CEW 2026 BEAUTY AWARDS BEAUTY EDIT', sku: 'LIB_COLL_CEW26_500', first: '2026-07', last: '2026-08' }, e), '11');
+  assert.equal(suggest({ title: 'THE LIB X STYLIST BEAUTY ADVENT CALENDAR', sku: 'LIB_COLL_AC25', first: '2026-01', last: '2026-01' }, e), '12');
+  assert.equal(suggest({ title: 'THE LIB X STYLIST BEAUTY ADVENT CALENDAR 2026', sku: 'LIB_COLL_AC26', first: '2026-10', last: '2026-10' }, e), '13');
+  assert.equal(suggest({ title: 'The Stylist Beauty Advent Calendar', sku: 'LIB_COLL_AC24', first: '2026-01', last: '2026-01' }, e), null);
 });
 
 test('Excel downloads: real numbers and dates that add up', () => {

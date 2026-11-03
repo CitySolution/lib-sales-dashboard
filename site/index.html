@@ -188,7 +188,7 @@
           <li>Set the date range to <b>start on the 1st of a month</b> and end today. Each upload replaces the months it covers, so a month that starts part-way through would lose its first days.</li>
           <li>Click <b>Export</b> and choose <b>CSV</b>. Choose the file below, check the summary and press <b>Add to dashboard</b>.</li>
         </ol>
-        <p class="muted small">Only boxes are taken (SKUs starting LIB_COLL, or anything with sales); their £0 contents, free gifts and sales with no product (such as gift cards) are left out. The report has no Shopify fees: they'll come from the payouts export later. Changing Month to Day under Dimensions gives daily figures, so date filters work to the day for Shopify too.</p>
+        <p class="muted small">Only boxes are taken: products in the <b>BOXES</b> collection, SKUs starting LIB_COLL (older boxes leave the collection), and anything else with sales. A build-your-own box's items (SKUs starting BYOB26_) count as one box. £0 box contents, free gifts and sales with no product (such as gift cards) are left out. The report has no Shopify fees: they'll come from the payouts export later. Changing Month to Day under Dimensions gives daily figures, so date filters work to the day for Shopify too.</p>
         <div class="ctrl left"><input type="file" id="shop-file" accept=".csv"><button class="btn" id="shop-publish" disabled>Add to dashboard</button></div>
         <div id="shop-preview"></div>
       </div>
