@@ -93,6 +93,8 @@ input[type=file] { border: 0; padding: 0; background: none; max-width: 100%; }
 .t tbody tr.click:hover, .t tbody tr.sel { background: var(--hover); }
 .t .sku { display: block; font-size: 12px; color: var(--muted); }
 .t .sku.new { color: var(--warn-fg); }
+details.ignored { margin: 12px 0; }
+details.ignored > summary { cursor: pointer; color: var(--muted); padding: 6px 0; }
 select.skumap { display: block; width: 100%; max-width: 30em; margin-top: 6px; }
 #skumap td:first-child { min-width: 14em; }
 .t .neg { color: var(--bad); }

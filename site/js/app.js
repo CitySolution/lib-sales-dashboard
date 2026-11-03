@@ -689,20 +689,28 @@ function renderShopify() {
   const boxes = shopBoxes(), saved = state.skumap.values;
   if (!boxes.length) {
     $('skumap-help').textContent = 'Once Shopify figures are added (above), each Shopify box in them is listed here to match to its TikTok box.';
-    $('skumap').innerHTML = ''; $('skumap-actions').hidden = true;
+    $('skumap').innerHTML = ''; $('skumap-actions').hidden = true; $('skumap-ignored').hidden = true;
     return;
   }
   const tt = tiktokBoxes(), todo = boxes.filter((b) => !(b.sku in saved));
   $('skumap-help').innerHTML = `Say what each Shopify line is: <b>the same box as a TikTok one</b> (their sales count as one box, with one set of costs), <b>a Shopify box of its own</b> (enter its costs on the Costs tab), or <b>Ignore</b> if it isn't a box, such as an item inside one. <b>A line only counts in the figures once it's saved.</b>${todo.length ? ` ${todo.length} line${todo.length > 1 ? 's are' : ' is'} not checked yet (listed first, ${money(todo.reduce((a, b) => a + b.net, 0))} net sales left out): a choice is pre-filled for each from its name, so check them, then save.` : ''}`;
   const opt = (sel, unchecked) => `${unchecked ? '<option value="skip">Not checked yet: leave out for now</option>' : ''}<option value="ignore"${sel === 'ignore' ? ' selected' : ''}>Ignore: not a box (e.g. an item inside a box)</option>
     <option value=""${sel === '' ? ' selected' : ''}>Not on TikTok: a Shopify box of its own</option>${tt.map(([k, , last]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(state.full.skus[k].name)}${last ? ` (last sold ${dmy(last)})` : ''}</option>`).join('')}`;
-  // Not checked first. The choice goes under the Shopify line, so it's in view on a phone.
-  const rows = [...todo, ...boxes.filter((b) => b.sku in saved)];
-  $('skumap').innerHTML = `<thead><tr><th>Shopify line, and what it is</th><th>Sold</th><th>Net sales</th></tr></thead><tbody>${rows.map((b) => {
+  // Not checked first; saved as Ignore tucked away below. The choice goes under the
+  // Shopify line, so it's in view on a phone.
+  const line = (b) => {
     const has = b.sku in saved, sel = has ? saved[b.sku] ?? '' : suggest(b, tt) || (b.box ? '' : 'ignore');
     return `<tr><td>${esc(b.title)}<span class="sku">${esc(b.sku)}</span>${has ? '' : '<span class="sku new">Not checked yet</span>'}
       <select class="skumap" data-sku="${esc(b.sku)}" aria-label="What ${esc(b.title)} is"${state.admin ? '' : ' disabled'}>${opt(sel, !has)}</select></td><td>${int.format(b.n)}</td>${cell(b.net)}</tr>`;
-  }).join('')}</tbody>`;
+  };
+  const head = '<thead><tr><th>Shopify line, and what it is</th><th>Sold</th><th>Net sales</th></tr></thead>';
+  const ignored = boxes.filter((b) => saved[b.sku] === 'ignore');
+  const shown = [...todo, ...boxes.filter((b) => b.sku in saved && saved[b.sku] !== 'ignore')];
+  $('skumap').innerHTML = `${head}<tbody>${shown.map(line).join('') || '<tr><td colspan="3" class="muted">Every line is ignored.</td></tr>'}</tbody>`;
+  $('skumap-ignored').hidden = !ignored.length;
+  $('skumap-ignored').open = false;
+  $('skumap-ignored-n').textContent = `Ignored (${ignored.length}): not boxes, left out of the figures`;
+  $('skumap-ignored-table').innerHTML = `${head}<tbody>${ignored.map(line).join('')}</tbody>`;
   $('skumap-actions').hidden = !state.admin;
 }
 async function saveSkumap() {
