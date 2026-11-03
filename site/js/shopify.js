@@ -46,7 +46,7 @@ export function parseShopify(XLSX, buffer, name = '') {
     let sku = String(get('Product variant SKU')).trim(), title = String(get('Product title')).replace(/\s+/g, ' ').trim();
     const inBoxes = String(get('Product collection')).trim().toUpperCase() === 'BOXES', byob = BYOB.exec(sku);
     if (byob) { sku = byob[1].toUpperCase(); title = `Build your own box (${sku})`; }
-    const row = { d: dateCol === 'Month' ? `${d.slice(0, 7)}-01` : d, sku, title, n: num(get('Net items sold')) };
+    const row = { d: dateCol === 'Month' ? `${d.slice(0, 7)}-01` : d, sku, title, n: num(get('Net items sold')), ...(inBoxes || isBox(sku) || byob ? { box: 1 } : {}) };
     for (const [k, h] of Object.entries(MONEY)) row[k] = r2(num(get(h)));
     if (!sku && !title) { skipped.noProduct += row.n; skipped.noProductNet = r2(skipped.noProductNet + row.net); continue; }
     // Shopify's test products (TEST_…) are left out with the contents.
@@ -75,15 +75,26 @@ export function partialMonths(parsed, today) {
 }
 
 // Shopify's stored rows as dashboard day rows (see pnl.js), joined to the TikTok
-// figures. A Shopify box mapped to a TikTok box (map: { shopifySku: tiktokSku })
-// counts as that box; an unmapped one is a box of its own, "shopify:<SKU>".
+// figures. Only lines someone has decided on count (map: { shopifySku: decision }):
+// a TikTok SKU (the same box as that TikTok one), null (a Shopify box of its own,
+// "shopify:<SKU>") or 'ignore' (not a box, e.g. an item inside one: left out). Lines
+// not decided yet are left out too, and counted by pendingShopify().
+// A line that looks like a box (`box`: in the BOXES collection, a LIB_COLL SKU, or the
+// build-your-own items together as BYOB26) - not a single BYOB26_… item from an older upload.
+export const looksLikeBox = (r) => !!r.box || /^(LIB_COLL|BYOB\d*$)/i.test(r.sku);
+export function pendingShopify(shop, map = {}) {
+  const out = { skus: new Set(), net: 0 };
+  for (const rows of Object.values(shop?.months || {})) for (const r of rows) if (!(r.sku in map)) { out.skus.add(r.sku); out.net += r.net; }
+  return { lines: out.skus.size, net: r2(out.net) };
+}
 // Shopify's figures are ex VAT; the dashboard's revenue columns are incl. VAT (as
 // TikTok's are), so they're grossed up at 20% - net revenue comes out as Shopify's.
 // Monthly figures are dated the 1st of the month (`m` marks them).
 export const shopKey = (sku, map) => map?.[sku] || `shopify:${sku}`;
+const counted = (sku, map) => sku in (map || {}) && map[sku] !== 'ignore';
 export function withShopify(data, shop, map = {}) {
-  const months = Object.values(shop?.months || {});
-  if (!months.length) return data;
+  const months = Object.values(shop?.months || {}).map((rows) => rows.filter((r) => counted(r.sku, map)));
+  if (!months.some((rows) => rows.length)) return data;
   const out = { statements: {}, daily: [], adj: [], skus: {}, ...(data || {}) };
   out.daily = [...out.daily]; out.skus = { ...out.skus };
   for (const rows of months) for (const r of rows) {

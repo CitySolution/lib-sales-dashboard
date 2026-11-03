@@ -290,6 +290,8 @@ await test('box matching: admins only, validated, "not on TikTok" remembered, lo
   store.clear();
   assert.equal((await call(skumapPost, '/api/skumap', viewer, { body: { map: { LIB_COLL_A: '1729000000000000001' } } })).status, 403);
   for (const map of [{ LIB_COLL_A: 'abc' }, { '<x>': null }, null]) assert.equal((await call(skumapPost, '/api/skumap', admin, { body: { map } })).status, 400);
+  assert.equal((await call(skumapPost, '/api/skumap', admin, { body: { map: { BYOB26_D1_006288: 'ignore' } } })).status, 200, 'an item inside a box can be ignored');
+  store.delete('skumap');
   let r = await call(skumapPost, '/api/skumap', admin, { body: { map: { LIB_COLL_A: '1729000000000000001', LIB_COLL_S: null } } });
   assert.equal(r.body.changed, 2);
   r = await call(skumapPost, '/api/skumap', admin, { body: { map: { LIB_COLL_A: '1729000000000000001', LIB_COLL_S: null } } });

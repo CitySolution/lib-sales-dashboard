@@ -3,7 +3,7 @@ import { summary, byMonth, assemble, saleDates, inRange, prices, channel, COST_L
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 import { attention, withoutHidden, count as attCount, LIMITS, GROUPS } from './checks.js';
 import { METRICS, achieved, covered, vsTargets } from './targets.js';
-import { parseShopify, partialMonths, withShopify, suggest } from './shopify.js';
+import { parseShopify, partialMonths, withShopify, suggest, pendingShopify, looksLikeBox } from './shopify.js';
 import { book, targetsSheet, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet, shopUploadsSheet, gbp, pricePeriodSheet, priceBoxSheet } from './export.js';
 
 const $ = (id) => document.getElementById(id);
@@ -122,6 +122,10 @@ const pctRow = (label, v, extra = '') => `<tr class="pct"><td>${label}</td><td${
 function renderSummary(s, from, to) {
   const t = s.total;
   const missing = [...s.boxes].filter(([, b]) => b.uncosted).map(([sku]) => sku);
+  // Shopify lines nobody has said what they are yet aren't in any figure.
+  const pend = $('channel').value === 'tiktok' ? { lines: 0 } : pendingShopify(state.shopify, state.skumap.values);
+  $('shop-pending').hidden = !pend.lines;
+  $('shop-pending').innerHTML = pend.lines ? `<b>${pend.lines} Shopify line${pend.lines > 1 ? 's' : ''} (${money(pend.net)} net sales) ${pend.lines > 1 ? "aren't" : "isn't"} in these figures yet</b>: say what ${pend.lines > 1 ? 'they are' : 'it is'} (a TikTok box, a Shopify box of its own, or not a box) under <a href="#uploads">Uploads → Match Shopify boxes</a>.` : '';
   $('uncosted').hidden = !missing.length;
   $('uncosted').innerHTML = missing.length ? `<b>${missing.length} box${missing.length > 1 ? 'es have' : ' has'} no costs entered</b>, so ${missing.length > 1 ? 'their' : 'its'} profit is overstated: ${missing.slice(0, 4).map((k) => esc(boxName(k))).join(', ')}${missing.length > 4 ? '…' : ''}. <a href="#costs">Enter costs</a>.` : '';
   $('tiles').innerHTML = [
@@ -664,7 +668,7 @@ function shopBoxes() {
   for (const [m, rows] of Object.entries(state.shopify?.months || {}).sort()) {
     for (const r of rows) {
       const b = out.get(r.sku) || out.set(r.sku, { sku: r.sku, n: 0, net: 0 }).get(r.sku);
-      b.title = r.title; b.n += r.n; b.net += r.net; b.last = m; b.first ||= m;
+      b.title = r.title; b.n += r.n; b.net += r.net; b.last = m; b.first ||= m; b.box ||= looksLikeBox(r);
     }
   }
   return [...out.values()].sort((a, b) => b.net - a.net);
@@ -688,25 +692,29 @@ function renderShopify() {
     $('skumap').innerHTML = ''; $('skumap-actions').hidden = true;
     return;
   }
-  const tt = tiktokBoxes(), todo = boxes.filter((b) => !(b.sku in saved)).length;
-  $('skumap-help').textContent = `The same box has different names and SKUs on Shopify and TikTok. Choose each Shopify box's TikTok box, so their sales count as one box with one set of costs; a box only sold on Shopify stays a box of its own (enter its costs on the Costs tab).${todo ? ` ${todo} not checked yet: suggestions are pre-filled from the names, so check them before saving.` : ''}`;
-  const opt = (sel) => `<option value="">Not on TikTok: a Shopify box of its own</option>${tt.map(([k, , last]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(state.full.skus[k].name)}${last ? ` (last sold ${dmy(last)})` : ''}</option>`).join('')}`;
-  // The TikTok box goes under the Shopify one, so it's in view on a phone.
-  $('skumap').innerHTML = `<thead><tr><th>Shopify box, and the same box on TikTok</th><th>Sold</th><th>Net sales</th></tr></thead><tbody>${boxes.map((b) => {
-    const has = b.sku in saved, sel = has ? saved[b.sku] || '' : suggest(b, tt) || '';
+  const tt = tiktokBoxes(), todo = boxes.filter((b) => !(b.sku in saved));
+  $('skumap-help').innerHTML = `Say what each Shopify line is: <b>the same box as a TikTok one</b> (their sales count as one box, with one set of costs), <b>a Shopify box of its own</b> (enter its costs on the Costs tab), or <b>Ignore</b> if it isn't a box, such as an item inside one. <b>A line only counts in the figures once it's saved.</b>${todo.length ? ` ${todo.length} line${todo.length > 1 ? 's are' : ' is'} not checked yet (listed first, ${money(todo.reduce((a, b) => a + b.net, 0))} net sales left out): a choice is pre-filled for each from its name, so check them, then save.` : ''}`;
+  const opt = (sel, unchecked) => `${unchecked ? '<option value="skip">Not checked yet: leave out for now</option>' : ''}<option value="ignore"${sel === 'ignore' ? ' selected' : ''}>Ignore: not a box (e.g. an item inside a box)</option>
+    <option value=""${sel === '' ? ' selected' : ''}>Not on TikTok: a Shopify box of its own</option>${tt.map(([k, , last]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(state.full.skus[k].name)}${last ? ` (last sold ${dmy(last)})` : ''}</option>`).join('')}`;
+  // Not checked first. The choice goes under the Shopify line, so it's in view on a phone.
+  const rows = [...todo, ...boxes.filter((b) => b.sku in saved)];
+  $('skumap').innerHTML = `<thead><tr><th>Shopify line, and what it is</th><th>Sold</th><th>Net sales</th></tr></thead><tbody>${rows.map((b) => {
+    const has = b.sku in saved, sel = has ? saved[b.sku] ?? '' : suggest(b, tt) || (b.box ? '' : 'ignore');
     return `<tr><td>${esc(b.title)}<span class="sku">${esc(b.sku)}</span>${has ? '' : '<span class="sku new">Not checked yet</span>'}
-      <select class="skumap" data-sku="${esc(b.sku)}" aria-label="TikTok box for ${esc(b.title)}"${state.admin ? '' : ' disabled'}>${opt(sel)}</select></td><td>${int.format(b.n)}</td>${cell(b.net)}</tr>`;
+      <select class="skumap" data-sku="${esc(b.sku)}" aria-label="What ${esc(b.title)} is"${state.admin ? '' : ' disabled'}>${opt(sel, !has)}</select></td><td>${int.format(b.n)}</td>${cell(b.net)}</tr>`;
   }).join('')}</tbody>`;
   $('skumap-actions').hidden = !state.admin;
 }
 async function saveSkumap() {
-  const map = Object.fromEntries([...document.querySelectorAll('select.skumap')].map((s) => [s.dataset.sku, s.value || null]));
+  // '' is a Shopify box of its own (null); 'skip' leaves a line not checked.
+  const map = Object.fromEntries([...document.querySelectorAll('select.skumap')].filter((s) => s.value !== 'skip').map((s) => [s.dataset.sku, s.value || null]));
   $('skumap-msg').textContent = 'Saving…';
   try {
     const r = await api('/api/skumap', { map });
     $('skumap-msg').textContent = '';
     await load();
-    setStatus(r.changed ? `Box matches saved (${r.changed} changed).` : 'Box matches saved: nothing had changed.');
+    const left = pendingShopify(state.shopify, state.skumap.values).lines;
+    setStatus(`${r.changed ? `Saved (${r.changed} changed).` : 'Saved: nothing had changed.'}${left ? ` ${left} Shopify line${left > 1 ? 's' : ''} still not checked, so left out of the figures.` : ''}`);
   } catch (err) { $('skumap-msg').textContent = err.message; }
 }
 
@@ -765,8 +773,8 @@ async function download(key) {
     'att-refunds': () => group('refunds'),
     'att-hidden': () => ['Hidden', [['Hidden', hiddenSheet(att().hidden, boxName)]], false],
     uploads: () => ['Uploads', [['Uploads', uploadsSheet(D?.uploads || [])], ['Statements', statementsSheet(D?.statements || {})], ['Shopify uploads', shopUploadsSheet(state.shopify?.index?.uploads || [])]], false],
-    skumap: () => ['Box matches', [['Box matches', [['Shopify box', 'Shopify SKU', 'Sold', 'Net sales', 'TikTok box', 'TikTok SKU', 'Checked'],
-      ...shopBoxes().map((b) => { const t = state.skumap.values[b.sku]; return [b.title, b.sku, b.n, gbp(b.net), t ? boxName(t) : '', t || '', b.sku in state.skumap.values ? 'Yes' : 'No']; })]]], false],
+    skumap: () => ['Box matches', [['Box matches', [['Shopify line', 'Shopify SKU', 'Sold', 'Net sales', 'What it is', 'TikTok box', 'TikTok SKU'],
+      ...shopBoxes().map((b) => { const v = state.skumap.values, t = v[b.sku]; return [b.title, b.sku, b.n, gbp(b.net), !(b.sku in v) ? 'Not checked yet (left out)' : t === 'ignore' ? 'Ignored' : t ? 'Same box as on TikTok' : 'A Shopify box of its own', t && t !== 'ignore' ? boxName(t) : '', t && t !== 'ignore' ? t : '']; })]]], false],
   };
   const [title, sheets, dated = true] = sets[key]();
   const period = from || to ? `${from || 'start'} to ${to || 'latest'}` : 'all time';

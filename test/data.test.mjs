@@ -7,7 +7,7 @@ import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems, prices } 
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count, withoutHidden } from '../site/js/checks.js';
 import { covered, vsTargets } from '../site/js/targets.js';
-import { parseShopify, partialMonths, withShopify, suggest, isoDate } from '../site/js/shopify.js';
+import { parseShopify, partialMonths, withShopify, suggest, isoDate, pendingShopify, looksLikeBox } from '../site/js/shopify.js';
 import { channel, warehouseRates } from '../site/js/pnl.js';
 import { book, boxesSheet, periodSheet, plSheet, costHistorySheet, statementsSheet } from '../site/js/export.js';
 
@@ -266,7 +266,7 @@ test('Shopify: boxes kept, their £0 contents and no-product sales left out', ()
   assert.deepEqual(p.months['2026-01'].map((r) => r.sku), ['LIB_COLL_A']);
   assert.deepEqual(p.months['2026-02'].map((r) => r.sku), ['LIB_COLL_S', 'LIB_COLL_CS'], 'a £0 box SKU is still a box');
   assert.deepEqual(p.skipped, { contents: 1, noProduct: 2, noProductNet: 20 });
-  assert.deepEqual({ ...p.months['2026-01'][0] }, { d: '2026-01-01', sku: 'LIB_COLL_A', title: 'THE A BOX 2026', n: 3, gs: 120, sd: -12, gsr: -30, net: 78, tax: 15.6, ship: 0 });
+  assert.deepEqual({ ...p.months['2026-01'][0] }, { d: '2026-01-01', sku: 'LIB_COLL_A', title: 'THE A BOX 2026', n: 3, box: 1, gs: 120, sd: -12, gsr: -30, net: 78, tax: 15.6, ship: 0 });
   assert.deepEqual(partialMonths(p, '2026-03-05'), []);
   assert.deepEqual(partialMonths(shopParse('x - 2026-01-04 - 2026-02-15.csv'), '2026-03-05').map((w) => w.m), ['2026-01', '2026-02'], 'starts and stops part-way');
   assert.deepEqual(partialMonths(shopParse('x - 2026-01-01 - 2026-02-15.csv'), '2026-02-15'), [], 'the month in progress is fine');
@@ -293,14 +293,14 @@ test('Shopify: the BOXES collection; build-your-own items as one box; test produ
   const p = parseShopify(XLSX, new TextEncoder().encode(csv), 'x - 2026-08-01 - 2026-08-31.csv');
   const rows = p.months['2026-08'];
   assert.deepEqual(rows.map((r) => r.sku), ['NEWBOX1', 'LIB_COLL_OLD', 'BYOB26'], 'a BOXES box without a LIB_COLL SKU still counts');
-  assert.deepEqual({ ...rows[2] }, { d: '2026-08-01', sku: 'BYOB26', title: 'Build your own box (BYOB26)', n: 15, gs: 50, sd: -3, gsr: 0, net: 47, tax: 9.4, ship: 0 });
+  assert.deepEqual({ ...rows[2] }, { d: '2026-08-01', sku: 'BYOB26', title: 'Build your own box (BYOB26)', n: 15, box: 1, gs: 50, sd: -3, gsr: 0, net: 47, tax: 9.4, ship: 0 });
   assert.equal(p.skipped.contents, 2, 'the test product and the £0 contents');
 });
 
 test('Shopify: net revenue as Shopify says; a matched box is one box; no TikTok warehouse share', () => {
   const tik = merge(merge(null, parse(file1())).data, parse(file2())).data;
   const shop = asStored(shopParse());
-  const both = withShopify(tik, shop, { LIB_COLL_A: A });
+  const both = withShopify(tik, shop, { LIB_COLL_A: A, LIB_COLL_S: null, LIB_COLL_CS: null });
   const a = byBox(both, costs).get(A), tiktokA = byBox(tik, costs).get(A);
   close(a.rev - tiktokA.rev, 78, 'Shopify net sales added to box A');
   assert.equal(a.u - tiktokA.u, 3);
@@ -312,8 +312,14 @@ test('Shopify: net revenue as Shopify says; a matched box is one box; no TikTok 
   close(summary(channel(both, 'shopify'), costs).total.rev, 78 - 25, 'Shopify only');
   close(summary(channel(both, 'tiktok'), costs).overall, summary(tik, costs).overall, 'TikTok only is as before');
   assert.equal(saleDates(both).get('shopify:LIB_COLL_S'), undefined, 'monthly figures have no sale dates');
-  const unmapped = withShopify(tik, shop, {});
-  assert.ok(byBox(unmapped, costs).has('shopify:LIB_COLL_A')); assert.equal(byBox(unmapped, costs).get(A).u, tiktokA.u);
+  // Lines nobody has decided on, and ignored ones, count nowhere.
+  assert.equal(withShopify(tik, shop, {}), tik, 'nothing decided: TikTok as it was');
+  const some = withShopify(tik, shop, { LIB_COLL_A: null, LIB_COLL_S: 'ignore' });
+  assert.ok(byBox(some, costs).has('shopify:LIB_COLL_A')); assert.ok(!byBox(some, costs).has('shopify:LIB_COLL_S')); assert.ok(!byBox(some, costs).has('shopify:LIB_COLL_CS'));
+  assert.equal(byBox(some, costs).get(A).u, tiktokA.u);
+  assert.deepEqual(pendingShopify(shop, { LIB_COLL_A: null, LIB_COLL_S: 'ignore' }), { lines: 1, net: 0 });
+  assert.deepEqual(pendingShopify(shop, {}), { lines: 3, net: 53 });
+  assert.equal(looksLikeBox({ sku: 'BYOB26' }), true); assert.equal(looksLikeBox({ sku: 'BYOB26_D1_006288' }), false); assert.equal(looksLikeBox({ sku: 'NEWBOX1', box: 1 }), true);
 });
 
 test('Shopify: suggests the TikTok box with the same name words, newest first', () => {

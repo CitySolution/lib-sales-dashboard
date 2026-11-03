@@ -94,10 +94,11 @@ upload replaces the months it contains**; the upload warns when a month would be
 - Shopify's figures are ex VAT; they're grossed up at 20% into the same incl-VAT columns as
   TikTok's, so net revenue comes out as Shopify's net sales.
 - Monthly figures are dated the 1st of the month and have no first/last sale dates.
-- **Box matching** (`skumap` in KV, `functions/api/skumap.js`): which TikTok box each Shopify
-  box is. Matched boxes count as one box with one set of costs; an unmatched one is a box of
-  its own, `shopify:<SKU>`, with its own costs. Matches are applied in the browser, so
-  changing one needs no re-upload.
+- **Box matching** (`skumap` in KV, `functions/api/skumap.js`): what each Shopify line is - a
+  TikTok box's SKU (the same box: one box, one set of costs), `null` (a Shopify box of its own,
+  `shopify:<SKU>`, with its own costs) or `'ignore'` (not a box, e.g. an item inside one).
+  **Only decided lines count anywhere**; the Summary says how much is still waiting. Decisions
+  are applied in the browser, so changing one needs no re-upload.
 - The **Channel** filter shows TikTok, Shopify or both. TikTok's FBT warehouse fee is only
   shared across TikTok boxes.
 - Shopify's fees aren't in this report; they'd come from the payouts export.

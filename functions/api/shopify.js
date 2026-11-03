@@ -5,7 +5,7 @@
 // keeps each within Cloudflare's CPU limit.
 //
 // KV: 'shopify'          { months: { 'YYYY-MM': { rows, net, monthly, at, by, file } }, uploads }
-//     'shopify:YYYY-MM'  that month's rows: [{ d, sku, title, n, gs, sd, gsr, net, tax, ship }]
+//     'shopify:YYYY-MM'  that month's rows: [{ d, sku, title, n, gs, sd, gsr, net, tax, ship, box? }]
 import { adminJson, json, fail, HttpError } from '../_lib/auth.js';
 
 const bad = (msg) => { throw new HttpError(400, msg); };
@@ -20,6 +20,7 @@ export function sanitiseRows(month, rows) {
     if (typeof r.sku !== 'string' || !/^[\w.-]{1,60}$/.test(r.sku)) bad(`Row ${i + 1}: unknown SKU.`);
     const o = { d: r.d, sku: r.sku, title: String(r.title ?? '').slice(0, 200), n: amount(r.n, `Row ${i + 1}: items sold`) };
     for (const k of MONEY) o[k] = amount(r[k] ?? 0, `Row ${i + 1}: ${k}`);
+    if (r.box === 1) o.box = 1;
     return o;
   });
 }

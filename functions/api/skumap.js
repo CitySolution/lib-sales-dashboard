@@ -1,7 +1,8 @@
-// POST /api/skumap { map: { shopifySku: tiktokSku | null } } - admins only. Says which
-// TikTok box each Shopify box is (they have different names and SKUs), so the two
-// channels' sales count as one box; null means someone checked and it's not on TikTok
-// (kept, so the page can tell checked boxes from new ones). Every change is logged.
+// POST /api/skumap { map: { shopifySku: tiktokSku | null | 'ignore' } } - admins only.
+// What each Shopify line is: a TikTok box's SKU (the same box - they have different
+// names and SKUs on the two channels), null (a Shopify box of its own) or 'ignore'
+// (not a box, e.g. an item inside one). Lines not decided yet count nowhere
+// (site/js/shopify.js). Every change is logged.
 import { adminJson, json, fail, HttpError } from '../_lib/auth.js';
 
 const bad = (msg) => { throw new HttpError(400, msg); };
@@ -15,7 +16,7 @@ export async function onRequestPost({ request, env }) {
     const changed = {};
     for (const [s, t] of Object.entries(map)) {
       if (!/^[\w.-]{1,60}$/.test(s)) bad(`"${s}" isn't a Shopify SKU.`);
-      if (t !== null && !(typeof t === 'string' && /^\d{1,30}$/.test(t))) bad(`${s}: that isn't a TikTok box.`);
+      if (t !== null && t !== 'ignore' && !(typeof t === 'string' && /^\d{1,30}$/.test(t))) bad(`${s}: that isn't a TikTok box.`);
       if (s in cur.values && cur.values[s] === t) continue;
       cur.values[s] = t;
       changed[s] = t;
