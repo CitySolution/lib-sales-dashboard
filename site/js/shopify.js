@@ -12,6 +12,15 @@ const MONEY = { gs: 'Gross sales', sd: 'Discounts', gsr: 'Sales reversals', net:
 const isBox = (sku) => /^LIB_COLL/i.test(sku);
 const num = (v) => { const n = Number(String(v ?? '').replace(/[£,\s]/g, '')); return Number.isFinite(n) ? n : 0; };
 const r2 = (v) => Math.round(v * 100) / 100;
+// A date as Shopify exports it (2026-01-01), or as Excel saves it after opening the
+// file (01/01/26 or 01/01/2026, day first): YYYY-MM-DD, or null.
+export function isoDate(v) {
+  const s = String(v ?? '').trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(s);
+  if (!m || +m[2] < 1 || +m[2] > 12 || +m[1] < 1 || +m[1] > 31) return null;
+  return `${m[3].length === 2 ? `20${m[3]}` : m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
 
 // The report's date range, from its file name ("… - 2026-10-01 - 2026-10-31.csv").
 export const fileRange = (name) => { const m = /(\d{4}-\d{2}-\d{2})\D+(\d{4}-\d{2}-\d{2})/.exec(name || ''); return m ? { from: m[1], to: m[2] } : {}; };
@@ -29,8 +38,8 @@ export function parseShopify(XLSX, buffer, name = '') {
   const months = {}, skipped = { contents: 0, noProduct: 0, noProductNet: 0 };
   for (const r of grid.slice(1)) {
     const get = (h) => (h in col ? r[col[h]] : '');
-    const d = String(get(dateCol)).slice(0, 10);
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) continue;
+    const d = isoDate(get(dateCol));
+    if (!d) continue;
     const sku = String(get('Product variant SKU')).trim(), title = String(get('Product title')).replace(/\s+/g, ' ').trim();
     const row = { d: dateCol === 'Month' ? `${d.slice(0, 7)}-01` : d, sku, title, n: num(get('Net items sold')) };
     for (const [k, h] of Object.entries(MONEY)) row[k] = r2(num(get(h)));
@@ -39,6 +48,8 @@ export function parseShopify(XLSX, buffer, name = '') {
     if (!sku) continue;
     (months[row.d.slice(0, 7)] ||= []).push(row);
   }
+  // Every LiB box has a LIB_COLL SKU: a file without any is from another shop.
+  if (!Object.values(months).flat().some((r) => isBox(r.sku))) throw new Error('There are no Latest in Beauty boxes in this file (no SKUs starting LIB_COLL), so it looks like another shop\'s report. In Shopify, check the store name at the bottom left is Latest in Beauty, then export again.');
   const ms = Object.keys(months).sort();
   return { months, monthly: dateCol === 'Month', ...fileRange(name), first: ms[0], last: ms.at(-1), skipped };
 }

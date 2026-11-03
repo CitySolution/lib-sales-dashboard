@@ -7,7 +7,7 @@ import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems, prices } 
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count, withoutHidden } from '../site/js/checks.js';
 import { covered, vsTargets } from '../site/js/targets.js';
-import { parseShopify, partialMonths, withShopify, suggest } from '../site/js/shopify.js';
+import { parseShopify, partialMonths, withShopify, suggest, isoDate } from '../site/js/shopify.js';
 import { channel, warehouseRates } from '../site/js/pnl.js';
 import { book, boxesSheet, periodSheet, plSheet, costHistorySheet, statementsSheet } from '../site/js/export.js';
 
@@ -271,6 +271,13 @@ test('Shopify: boxes kept, their £0 contents and no-product sales left out', ()
   assert.deepEqual(partialMonths(shopParse('x - 2026-01-04 - 2026-02-15.csv'), '2026-03-05').map((w) => w.m), ['2026-01', '2026-02'], 'starts and stops part-way');
   assert.deepEqual(partialMonths(shopParse('x - 2026-01-01 - 2026-02-15.csv'), '2026-02-15'), [], 'the month in progress is fine');
   assert.throws(() => parseShopify(XLSX, new TextEncoder().encode('"Product title","Net sales"\n"A",1'), 'x.csv'), /Total sales by product variant/);
+  // Another shop's report (no LiB box SKUs) is refused.
+  const beer = SHOP_CSV.split('\n').filter((l, i) => !i || !/LIB_COLL/.test(l)).concat('"Pale Ale, 12 x 500ml Bottles","Default Title","PACase","2026-01-01","2026-01-01",1,27.5,0,0,27.5,5.5,33').join('\n');
+  assert.throws(() => parseShopify(XLSX, new TextEncoder().encode(beer), 'x.csv'), /no Latest in Beauty boxes/);
+  // Dates as Excel saves them after opening the file: day first.
+  const excel = parseShopify(XLSX, new TextEncoder().encode(SHOP_CSV.replace(/"2026-0(\d)-01","2026-01-01"/g, '"01/0$1/26","2026"')), 'x.csv');
+  assert.deepEqual(Object.keys(excel.months), ['2026-01', '2026-02']);
+  assert.equal(isoDate('01/02/2026'), '2026-02-01'); assert.equal(isoDate('13/13/26'), null);
 });
 
 test('Shopify: net revenue as Shopify says; a matched box is one box; no TikTok warehouse share', () => {
