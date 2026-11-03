@@ -18,7 +18,7 @@
 
   <main class="page">
     <div class="hero">
-      <p class="eyebrow">Box profitability · TikTok Shop</p>
+      <p class="eyebrow">Box profitability · TikTok Shop · Shopify</p>
       <h1 id="title">Sales dashboard</h1>
       <p class="muted" id="coverage"></p>
     </div>
@@ -46,6 +46,13 @@
           <option value="l12">Last 12 months</option>
           <option value="all">All time</option>
           <option value="custom">Custom…</option>
+        </select>
+      </label>
+      <label id="channel-pick" hidden>Channel
+        <select id="channel">
+          <option value="all">TikTok and Shopify</option>
+          <option value="tiktok">TikTok only</option>
+          <option value="shopify">Shopify only</option>
         </select>
       </label>
       <span id="custom" hidden><input type="date" id="from" aria-label="From"> – <input type="date" id="to" aria-label="To"></span>
@@ -174,10 +181,29 @@
         <div class="ctrl left"><input type="file" id="files" accept=".xlsx" multiple><button class="btn" id="publish" disabled>Add to dashboard</button></div>
         <div id="preview"></div>
       </div>
+      <div class="card" id="shop-upload" hidden>
+        <h2>Add new Shopify figures</h2>
+        <ol class="steps">
+          <li>In <b>Shopify</b> go to <b>Analytics → Reports</b> and open <b>Copy of Total sales by product variant</b> (LiB's saved copy, with a Month column), <a href="https://admin.shopify.com/store/684f8e-b7/analytics/reports?q=Copy+of+Total+sales+by+product+variant" target="_blank" rel="noopener">open it here</a>. Not the original "Total sales by product variant": that one has no dates.</li>
+          <li>Set the date range to <b>start on the 1st of a month</b> and end today. Each upload replaces the months it covers, so a month that starts part-way through would lose its first days.</li>
+          <li>Click <b>Export</b> and choose <b>CSV</b>. Choose the file below, check the summary and press <b>Add to dashboard</b>.</li>
+        </ol>
+        <p class="muted small">Only boxes are taken (SKUs starting LIB_COLL, or anything with sales); their £0 contents, free gifts and sales with no product (such as gift cards) are left out. The report has no Shopify fees: they'll come from the payouts export later. Changing Month to Day under Dimensions gives daily figures, so date filters work to the day for Shopify too.</p>
+        <div class="ctrl left"><input type="file" id="shop-file" accept=".csv"><button class="btn" id="shop-publish" disabled>Add to dashboard</button></div>
+        <div id="shop-preview"></div>
+      </div>
+      <div class="card" id="skumap-card" hidden>
+        <div class="ctrl"><h2>Match Shopify boxes to TikTok boxes</h2><button class="btn ghost xl" data-xlsx="skumap">Excel</button></div>
+        <p class="muted small" id="skumap-help"></p>
+        <div class="tablewrap"><table class="t" id="skumap"></table></div>
+        <div class="ctrl left" id="skumap-actions" hidden><button class="btn" id="skumap-save">Save matches</button><span id="skumap-msg" class="muted"></span></div>
+      </div>
       <div class="card">
         <div class="ctrl"><h2>What's loaded</h2><button class="btn ghost xl" data-xlsx="uploads">Excel</button></div>
         <div id="loaded"></div>
         <div class="tablewrap"><table class="t" id="uploads"></table></div>
+        <div id="shop-loaded"></div>
+        <div class="tablewrap"><table class="t" id="shop-months"></table></div>
       </div>
     </section>
     <!-- Access: who can change things (admins only) -->

@@ -7,6 +7,8 @@ import { merge, byBox, summary, byMonth, costAt, saleDates, shopItems, prices } 
 import { workbook, row, file1, file2, HEADER, A, B } from './fixture.mjs';
 import { attention, count, withoutHidden } from '../site/js/checks.js';
 import { covered, vsTargets } from '../site/js/targets.js';
+import { parseShopify, partialMonths, withShopify, suggest } from '../site/js/shopify.js';
+import { channel, warehouseRates } from '../site/js/pnl.js';
 import { book, boxesSheet, periodSheet, plSheet, costHistorySheet, statementsSheet } from '../site/js/export.js';
 
 const close = (a, b, what) => assert.ok(Math.abs(a - b) < 0.005, `${what}: got ${a}, expected ${b}`);
@@ -243,6 +245,58 @@ test('targets: achieved against target, and pace up to the latest order loaded',
   assert.equal(rows[0].n.expected, 1, 'January is over');
   close(rows[1].rev.projected, months.get('2026-02').rev * 4, 'a week in, on pace for 4x');
   assert.equal(rows[1].n, null, 'no target set');
+});
+
+// Shopify's "Total sales by product variant" report, as its CSV comes out (monthly).
+const SHOP_CSV = [
+  '"Product title","Product variant title","Product variant SKU","Month","Year","Net items sold","Gross sales","Discounts","Sales reversals","Net sales","Taxes","Total sales"',
+  '"THE A BOX 2026","Default Title","LIB_COLL_A","2026-01-01","2026-01-01",3,120,-12,-30,78,15.6,93.6',
+  '"Rodial - Bee Venom	15ml (NBT3_002530)","Default Title","NBT3_002530","2026-01-01","2026-01-01",3,0,0,0,0,0,0',
+  ',,,"2026-01-01","2026-01-01",2,20,0,0,20,0,20',
+  '"SHOP ONLY BOX","Default Title","LIB_COLL_S","2026-02-01","2026-01-01",-1,0,0,-25,-25,-5,-30',
+  '"FREE CS BOX","Default Title","LIB_COLL_CS","2026-02-01","2026-01-01",1,0,0,0,0,0,0',
+].join('\n');
+const shopParse = (name = 'Copy of Total sales by product variant - 2026-01-01 - 2026-02-28.csv') => parseShopify(XLSX, new TextEncoder().encode(SHOP_CSV), name);
+const asStored = (p) => ({ index: { months: Object.fromEntries(Object.keys(p.months).map((m) => [m, { monthly: p.monthly }])) }, months: p.months });
+
+test('Shopify: boxes kept, their £0 contents and no-product sales left out', () => {
+  const p = shopParse();
+  assert.equal(p.monthly, true); assert.equal(p.from, '2026-01-01');
+  assert.deepEqual(Object.keys(p.months), ['2026-01', '2026-02']);
+  assert.deepEqual(p.months['2026-01'].map((r) => r.sku), ['LIB_COLL_A']);
+  assert.deepEqual(p.months['2026-02'].map((r) => r.sku), ['LIB_COLL_S', 'LIB_COLL_CS'], 'a £0 box SKU is still a box');
+  assert.deepEqual(p.skipped, { contents: 1, noProduct: 2, noProductNet: 20 });
+  assert.deepEqual({ ...p.months['2026-01'][0] }, { d: '2026-01-01', sku: 'LIB_COLL_A', title: 'THE A BOX 2026', n: 3, gs: 120, sd: -12, gsr: -30, net: 78, tax: 15.6, ship: 0 });
+  assert.deepEqual(partialMonths(p, '2026-03-05'), []);
+  assert.deepEqual(partialMonths(shopParse('x - 2026-01-04 - 2026-02-15.csv'), '2026-03-05').map((w) => w.m), ['2026-01', '2026-02'], 'starts and stops part-way');
+  assert.deepEqual(partialMonths(shopParse('x - 2026-01-01 - 2026-02-15.csv'), '2026-02-15'), [], 'the month in progress is fine');
+  assert.throws(() => parseShopify(XLSX, new TextEncoder().encode('"Product title","Net sales"\n"A",1'), 'x.csv'), /Total sales by product variant/);
+});
+
+test('Shopify: net revenue as Shopify says; a matched box is one box; no TikTok warehouse share', () => {
+  const tik = merge(merge(null, parse(file1())).data, parse(file2())).data;
+  const shop = asStored(shopParse());
+  const both = withShopify(tik, shop, { LIB_COLL_A: A });
+  const a = byBox(both, costs).get(A), tiktokA = byBox(tik, costs).get(A);
+  close(a.rev - tiktokA.rev, 78, 'Shopify net sales added to box A');
+  assert.equal(a.u - tiktokA.u, 3);
+  close(a.otherLines['FBT Warehouse service fee'], tiktokA.otherLines['FBT Warehouse service fee'], 'warehouse fee not shared with Shopify');
+  assert.deepEqual(warehouseRates(both), warehouseRates(tik));
+  const s = byBox(both, costs).get('shopify:LIB_COLL_S');
+  assert.equal(s.r, 1); close(s.rev, -25, 'refund-only month'); assert.equal(both.skus['shopify:LIB_COLL_S'].name, 'SHOP ONLY BOX');
+  assert.ok(both.skus[A].names.includes('THE A BOX 2026'), 'Shopify name kept for searching');
+  close(summary(channel(both, 'shopify'), costs).total.rev, 78 - 25, 'Shopify only');
+  close(summary(channel(both, 'tiktok'), costs).overall, summary(tik, costs).overall, 'TikTok only is as before');
+  assert.equal(saleDates(both).get('shopify:LIB_COLL_S'), undefined, 'monthly figures have no sale dates');
+  const unmapped = withShopify(tik, shop, {});
+  assert.ok(byBox(unmapped, costs).has('shopify:LIB_COLL_A')); assert.equal(byBox(unmapped, costs).get(A).u, tiktokA.u);
+});
+
+test('Shopify: suggests the TikTok box with the same name words, newest first', () => {
+  const c = [['1', ['The Grooming Advent Box 2025'], '2025-12-01'], ['2', ["The Men's Grooming Kit Bundle. Advent Addition"], '2026-09-30'], ['3', ['Teen Kind. The Fresh Start Beauty Kit'], '2026-08-01']];
+  assert.equal(suggest('THE GROOMING KIT - ADVENT EDITION 2026', c), '2');
+  assert.equal(suggest('TEEN KIND. THE FRESH START BEAUTY KIT', c), '3');
+  assert.equal(suggest('MYSTERY BOX #6', c), null);
 });
 
 test('Excel downloads: real numbers and dates that add up', () => {

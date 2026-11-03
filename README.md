@@ -1,7 +1,7 @@
 # Latest in Beauty — sales dashboard
 
 How profitable each box is that Latest in Beauty (LiB) sells, built from TikTok Shop
-settlement exports (Shopify to follow). Hosted on Cloudflare Pages behind Cloudflare
+settlement exports and Shopify's sales report. Hosted on Cloudflare Pages behind Cloudflare
 Access: only **@citysolution.co.uk** and **@latestinbeauty.com** email addresses can
 sign in. Setup: **[SETUP.md](SETUP.md)**.
 
@@ -81,8 +81,23 @@ python3 -I reference/reference.py a.xlsx b.xlsx > ref.json && node test/real.tes
 
 Never commit a real export: `.gitignore` blocks `*.xlsx`, `*.xls` and `*.csv`.
 
-## Adding Shopify later
+## Shopify
 
-Stored rows already carry a channel (`ch: 'tiktok'`), and costs are per box, so
-Shopify needs a reader for its export, a way to match Shopify products to the TikTok
-SKU IDs, and a channel filter on the page.
+Uploaded on the Uploads tab: Shopify's **Copy of Total sales by product variant** report
+(Analytics → Reports, LiB's saved copy with a Month or Day column), as CSV. Read by
+`site/js/shopify.js`; stored by `functions/api/shopify.js` one month per KV value
+(`shopify:YYYY-MM`, indexed in `shopify`). The report has no statement IDs, so **each
+upload replaces the months it contains**; the upload warns when a month would be partial.
+
+- Only boxes are kept: SKUs starting `LIB_COLL`, or any row with sales. Their £0 contents,
+  free gifts, and sales with no product (gift cards, custom items) are left out.
+- Shopify's figures are ex VAT; they're grossed up at 20% into the same incl-VAT columns as
+  TikTok's, so net revenue comes out as Shopify's net sales.
+- Monthly figures are dated the 1st of the month and have no first/last sale dates.
+- **Box matching** (`skumap` in KV, `functions/api/skumap.js`): which TikTok box each Shopify
+  box is. Matched boxes count as one box with one set of costs; an unmatched one is a box of
+  its own, `shopify:<SKU>`, with its own costs. Matches are applied in the browser, so
+  changing one needs no re-upload.
+- The **Channel** filter shows TikTok, Shopify or both. TikTok's FBT warehouse fee is only
+  shared across TikTok boxes.
+- Shopify's fees aren't in this report; they'd come from the payouts export.

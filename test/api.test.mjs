@@ -12,6 +12,8 @@ import { onRequestPost as seedPost } from '../functions/api/seed.js';
 import { onRequestPost as dismissPost } from '../functions/api/dismiss.js';
 import { onRequestPost as targetsPost } from '../functions/api/targets.js';
 import { onRequestPost as usersPost } from '../functions/api/users.js';
+import { onRequestPost as shopifyPost } from '../functions/api/shopify.js';
+import { onRequestPost as skumapPost } from '../functions/api/skumap.js';
 import seed from '../functions/_lib/seed.json' with { type: 'json' };
 import seedCosts from '../functions/_lib/seed-costs.json' with { type: 'json' };
 import { assemble, merge } from '../site/js/pnl.js';
@@ -265,5 +267,35 @@ await test('access: admins add and remove admins; owners and yourself stay; logg
   assert.equal((await call(me, '/api/me', nort)).body.admin, false);
   assert.equal((await call(costsPost, '/api/costs', nort, { body: { sku: A, entries: [] } })).status, 403);
   assert.equal(JSON.parse(store.get('users')).log.length, 2);
+});
+await test('Shopify: admins only, one month per upload, a re-upload replaces the month', async () => {
+  store.clear();
+  const row = (d, sku, net) => ({ d, sku, title: `Box ${sku}`, n: 2, gs: net, sd: 0, gsr: 0, net, tax: net / 5, ship: 0 });
+  const body = { month: '2026-10', rows: [row('2026-10-01', 'LIB_COLL_A', 100)], monthly: true, file: { name: 'x.csv', from: '2026-10-01', to: '2026-10-31' } };
+  assert.equal((await call(shopifyPost, '/api/shopify', viewer, { body })).status, 403);
+  for (const bad of [{ ...body, month: '2026-13' }, { ...body, rows: [row('2026-11-01', 'LIB_COLL_A', 1)] }, { ...body, rows: [row('2026-10-01', '<b>', 1)] }, { ...body, rows: [{ ...row('2026-10-01', 'A', 1), net: 'lots' }] }]) {
+    assert.equal((await call(shopifyPost, '/api/shopify', admin, { body: bad })).status, 400);
+  }
+  assert.equal((await call(shopifyPost, '/api/shopify', admin, { body })).body.replaced, false);
+  assert.equal((await call(shopifyPost, '/api/shopify', admin, { body: { ...body, month: '2026-11', rows: [row('2026-11-01', 'LIB_COLL_A', 50)] } })).status, 200);
+  const again = await call(shopifyPost, '/api/shopify', admin, { body: { ...body, rows: [row('2026-10-01', 'LIB_COLL_A', 120), row('2026-10-01', 'LIB_COLL_B', 30)] } });
+  assert.equal(again.body.replaced, true);
+  const s = (await call(me, '/api/me', viewer)).body.shopify;
+  assert.deepEqual(Object.keys(s.months).sort(), ['2026-10', '2026-11']);
+  assert.deepEqual(s.months['2026-10'].map((r) => r.net), [120, 30], 'October replaced, not added to');
+  assert.equal(s.index.months['2026-10'].net, 150); assert.equal(s.index.uploads.length, 3);
+});
+await test('box matching: admins only, validated, "not on TikTok" remembered, logged', async () => {
+  store.clear();
+  assert.equal((await call(skumapPost, '/api/skumap', viewer, { body: { map: { LIB_COLL_A: '1729000000000000001' } } })).status, 403);
+  for (const map of [{ LIB_COLL_A: 'abc' }, { '<x>': null }, null]) assert.equal((await call(skumapPost, '/api/skumap', admin, { body: { map } })).status, 400);
+  let r = await call(skumapPost, '/api/skumap', admin, { body: { map: { LIB_COLL_A: '1729000000000000001', LIB_COLL_S: null } } });
+  assert.equal(r.body.changed, 2);
+  r = await call(skumapPost, '/api/skumap', admin, { body: { map: { LIB_COLL_A: '1729000000000000001', LIB_COLL_S: null } } });
+  assert.equal(r.body.changed, 0, 'saving the same again changes nothing');
+  const m = (await call(me, '/api/me', viewer)).body.skumap;
+  assert.deepEqual(m.values, { LIB_COLL_A: '1729000000000000001', LIB_COLL_S: null }); assert.equal(m.log.length, 1);
+  assert.equal((await call(costsPost, '/api/costs', admin, { body: { sku: 'shopify:LIB_COLL_S', entries: [] } })).status, 200, 'costs for a Shopify-only box');
+  assert.equal((await call(costsPost, '/api/costs', admin, { body: { sku: 'shopify:<x>', entries: [] } })).status, 400);
 });
 console.log(`${n} API tests passed`);

@@ -25,7 +25,8 @@ export function sanitiseEntries(list) {
 export async function onRequestPost({ request, env }) {
   try {
     const { who, body } = await adminJson(request, env, 100_000);
-    const sku = /^\d{1,30}$/.test(body?.sku) ? body.sku : bad('Unknown box.');
+    // A TikTok SKU ID, or a Shopify box not matched to a TikTok one (site/js/shopify.js).
+    const sku = /^(\d{1,30}|shopify:[\w.-]{1,60})$/.test(body?.sku) ? body.sku : bad('Unknown box.');
     const entries = sanitiseEntries(body.entries);
     const cur = (await env.LIB_DATA.get('costs', 'json')) || { values: {}, log: [] };
     if (entries.length) cur.values[sku] = entries; else delete cur.values[sku];

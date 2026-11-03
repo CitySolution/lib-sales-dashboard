@@ -95,6 +95,8 @@ export const hiddenSheet = (hidden, name) => [['Item', 'Box', 'SKU', 'Hidden unt
 // Uploads and every statement loaded.
 export const uploadsSheet = (uploads) => [['File', 'When', 'Who', 'Orders from', 'Orders to', 'New statements', 'Already loaded', 'Settlement added'],
   ...uploads.slice().reverse().map((u) => [u.name, when(u.at), u.by, day(u.first), day(u.last), u.added, u.already, gbp(u.settlement)])];
+export const shopUploadsSheet = (uploads) => [['File', 'When', 'Who', 'Report from', 'Report to', 'Month', 'Box rows', 'Net sales', 'Replaced earlier figures'],
+  ...uploads.slice().reverse().map((u) => [u.name, when(u.at), u.by, day(u.from), day(u.to), month(u.month), u.rows, gbp(u.net), u.replaced ? 'Yes' : 'No'])];
 export const statementsSheet = (statements) => [['Statement ID', 'Statement date', 'Channel', 'Settlement'],
   ...Object.entries(statements).sort(([, a], [, b]) => a.date.localeCompare(b.date)).map(([id, s]) => [id, day(s.date), s.ch === 'tiktok' ? 'TikTok' : s.ch, gbp(s.settlement)])];
 

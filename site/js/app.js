@@ -1,9 +1,10 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
-import { summary, byMonth, assemble, saleDates, inRange, prices, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
+import { summary, byMonth, assemble, saleDates, inRange, prices, channel, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 import { attention, withoutHidden, count as attCount, LIMITS, GROUPS } from './checks.js';
 import { METRICS, achieved, covered, vsTargets } from './targets.js';
-import { book, targetsSheet, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet, pricePeriodSheet, priceBoxSheet } from './export.js';
+import { parseShopify, partialMonths, withShopify, suggest } from './shopify.js';
+import { book, targetsSheet, boxesSheet, periodSheet, plSheet, costsSheet, costHistorySheet, costLogSheet, attDataSheet, attBoxSheet, hiddenSheet, uploadsSheet, statementsSheet, shopUploadsSheet, gbp, pricePeriodSheet, priceBoxSheet } from './export.js';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -16,6 +17,7 @@ const pct = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–');
 const rate = (v) => (Number.isFinite(v) ? `${+(v * 100).toFixed(2)}%` : '–'); // a cost rate as entered: 15%, 5.35%
 const ratio = (a, b) => (b ? a / b : NaN);
 const dmy = (d) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
+const monthLong = (m) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 const monthName = (m) => new Date(`${m}-01T12:00:00Z`).toLocaleDateString('en-GB', { month: 'short', year: '2-digit', timeZone: 'UTC' });
 
 let state = null; // { email, admin, data, costs }
@@ -93,6 +95,9 @@ const boxName = (sku) => state.data?.skus?.[sku]?.name || `SKU ${sku}`;
 const profitPer = (b) => ratio(b.net, b.n);
 
 function render() {
+  // The channel picked (TikTok, Shopify or both) is the figures everything below uses.
+  state.data = channel(state.full, $('channel').value);
+  state.spans = saleDates(state.data);
   const [from, to] = range();
   $('custom').hidden = $('period').value !== 'custom';
   $('range').textContent = from || to ? `${dmy(from) || 'start'} – ${dmy(to) || 'latest'} · by order date` : 'All orders loaded · by order date';
@@ -491,6 +496,8 @@ function renderCostEdit(sku) {
 function renderUploads() {
   const d = state.data;
   $('upload').hidden = !state.admin;
+  $('shop-upload').hidden = !state.admin;
+  renderShopify();
   $('seed').hidden = !state.seed_pending && !state.seed_costs && !state.seed_rebuild;
   $('seed-title').textContent = state.seed_rebuild ? 'Update the figures' : 'Load the initial figures and box costs';
   $('seed-text').textContent = state.seed_rebuild
@@ -592,6 +599,97 @@ async function loadSeed() {
   }
 }
 
+// ---- Shopify -----------------------------------------------------------------------
+// Uploads of the "Copy of Total sales by product variant" report (site/js/shopify.js),
+// one month per request, each replacing that month; and which TikTok box each
+// Shopify box is (functions/api/skumap.js).
+let shopPending = null;
+async function pickShopify() {
+  const f = $('shop-file').files[0];
+  shopPending = null; $('shop-publish').disabled = true;
+  if (!f) { $('shop-preview').innerHTML = ''; return; }
+  await loadXlsx();
+  try {
+    const p = parseShopify(XLSX, new Uint8Array(await f.arrayBuffer()), f.name);
+    const ms = Object.keys(p.months).sort();
+    if (!ms.length) throw new Error('No box sales in this file.');
+    const have = state.shopify?.months || {};
+    const rows = Object.values(p.months).flat(), net = rows.reduce((a, r) => a + r.net, 0);
+    const warn = partialMonths(p, iso(ukToday())).map((w) => `<div class="warn">${w.from ? `The report starts on ${dmy(w.from)}, so <b>${monthLong(w.m)}</b> would only have sales from then on` : `The report stops on ${dmy(w.to)}, so <b>${monthLong(w.m)}</b> would miss its last days`}, replacing any ${monthLong(w.m)} figures already loaded. To include the whole month, set the report's dates from the 1st${w.to ? ' to the end of the month' : ''} and export again.</div>`).join('');
+    const sk = p.skipped;
+    $('shop-preview').innerHTML = `${warn}<div class="filecard"><b>${esc(f.name)}</b><br>${p.monthly ? 'Monthly' : 'Daily'} figures for ${ms.map(monthLong).join(', ')} · ${new Set(rows.map((r) => r.sku)).size} boxes · net sales ${money(net, 2)} (ex VAT)
+      ${ms.some((m) => have[m]) ? `<br>Replaces the Shopify figures already loaded for ${ms.filter((m) => have[m]).map(monthLong).join(', ')}.` : ''}
+      <br><span class="muted">Left out: ${int.format(sk.contents)} £0 lines (box contents, free gifts)${sk.noProduct ? ` and ${int.format(sk.noProduct)} items with no product (${money(sk.noProductNet, 2)}, such as gift cards)` : ''}.</span></div>`;
+    shopPending = { name: f.name, p };
+    $('shop-publish').disabled = false;
+  } catch (err) {
+    $('shop-preview').innerHTML = `<div class="filecard err"><b>${esc(f.name)}</b>: ${esc(err.message)}</div>`;
+  }
+}
+async function publishShopify() {
+  const { name, p } = shopPending;
+  $('shop-publish').disabled = true;
+  try {
+    const ms = Object.keys(p.months).sort();
+    for (const [i, month] of ms.entries()) {
+      setStatus(`Adding Shopify ${monthLong(month)}… ${i + 1} of ${ms.length}`);
+      await api('/api/shopify', { month, rows: p.months[month], monthly: p.monthly, file: { name, from: p.from || null, to: p.to || null } });
+    }
+    shopPending = null; $('shop-file').value = ''; $('shop-preview').innerHTML = '';
+    await load();
+    const todo = shopBoxes().filter((b) => !(b.sku in state.skumap.values)).length;
+    setStatus(`Shopify figures added for ${ms.map(monthLong).join(', ')}.${todo ? ` ${todo} Shopify box${todo > 1 ? 'es' : ''} still to match to TikTok - see "Match Shopify boxes" below.` : ''}`);
+  } catch (err) {
+    setStatus(err.message, true);
+    $('shop-publish').disabled = false;
+  }
+}
+
+// Every Shopify box loaded: { sku, title (latest), n, net, last month }.
+function shopBoxes() {
+  const out = new Map();
+  for (const [m, rows] of Object.entries(state.shopify?.months || {}).sort()) {
+    for (const r of rows) {
+      const b = out.get(r.sku) || out.set(r.sku, { sku: r.sku, n: 0, net: 0 }).get(r.sku);
+      b.title = r.title; b.n += r.n; b.net += r.net; b.last = m;
+    }
+  }
+  return [...out.values()].sort((a, b) => b.net - a.net);
+}
+const tiktokBoxes = () => {
+  const spans = saleDates(channel(state.full, 'tiktok'));
+  return Object.entries(state.full?.skus || {}).filter(([k]) => /^\d+$/.test(k))
+    .map(([k, v]) => [k, v.names, spans.get(k)?.last || '']).sort((a, b) => b[2].localeCompare(a[2]) || state.full.skus[a[0]].name.localeCompare(state.full.skus[b[0]].name));
+};
+function renderShopify() {
+  const idx = state.shopify?.index, ms = Object.keys(idx?.months || {}).sort();
+  $('shop-loaded').innerHTML = ms.length ? `<h3>Shopify</h3><p>${ms.length} month${ms.length > 1 ? 's' : ''} loaded, ${monthLong(ms[0])} to ${monthLong(ms.at(-1))}: net sales ${money(ms.reduce((a, m) => a + idx.months[m].net, 0), 2)} (ex VAT).</p>` : '';
+  $('shop-months').innerHTML = ms.length ? `<thead><tr><th>Month</th><th>Figures</th><th>Box rows</th><th>Net sales</th><th>File</th><th>Uploaded</th><th>By</th></tr></thead><tbody>${ms.slice().reverse().map((m) => { const x = idx.months[m]; return `<tr><td data-v="${m}">${monthLong(m)}</td><td>${x.monthly ? 'Monthly' : 'Daily'}</td><td>${x.rows}</td>${cell(x.net, 2)}<td>${esc(x.file)}</td><td data-v="${x.at}">${new Date(x.at).toLocaleString('en-GB')}</td><td>${esc(x.by)}</td></tr>`; }).join('')}</tbody>` : '';
+  const boxes = shopBoxes(), saved = state.skumap.values;
+  $('skumap-card').hidden = !boxes.length;
+  if (!boxes.length) return;
+  const tt = tiktokBoxes(), todo = boxes.filter((b) => !(b.sku in saved)).length;
+  $('skumap-help').textContent = `The same box has different names and SKUs on Shopify and TikTok. Choose each Shopify box's TikTok box, so their sales count as one box with one set of costs; a box only sold on Shopify stays a box of its own (enter its costs on the Costs tab).${todo ? ` ${todo} not checked yet: suggestions are pre-filled from the names, so check them before saving.` : ''}`;
+  const opt = (sel) => `<option value="">Not on TikTok: a Shopify box of its own</option>${tt.map(([k, , last]) => `<option value="${k}"${k === sel ? ' selected' : ''}>${esc(state.full.skus[k].name)}${last ? ` (last sold ${dmy(last)})` : ''}</option>`).join('')}`;
+  // The TikTok box goes under the Shopify one, so it's in view on a phone.
+  $('skumap').innerHTML = `<thead><tr><th>Shopify box, and the same box on TikTok</th><th>Sold</th><th>Net sales</th></tr></thead><tbody>${boxes.map((b) => {
+    const has = b.sku in saved, sel = has ? saved[b.sku] || '' : suggest(b.title, tt) || '';
+    return `<tr><td>${esc(b.title)}<span class="sku">${esc(b.sku)}</span>${has ? '' : '<span class="sku new">Not checked yet</span>'}
+      <select class="skumap" data-sku="${esc(b.sku)}" aria-label="TikTok box for ${esc(b.title)}"${state.admin ? '' : ' disabled'}>${opt(sel)}</select></td><td>${int.format(b.n)}</td>${cell(b.net)}</tr>`;
+  }).join('')}</tbody>`;
+  $('skumap-actions').hidden = !state.admin;
+}
+async function saveSkumap() {
+  const map = Object.fromEntries([...document.querySelectorAll('select.skumap')].map((s) => [s.dataset.sku, s.value || null]));
+  $('skumap-msg').textContent = 'Saving…';
+  try {
+    const r = await api('/api/skumap', { map });
+    $('skumap-msg').textContent = '';
+    await load();
+    setStatus(r.changed ? `Box matches saved (${r.changed} changed).` : 'Box matches saved: nothing had changed.');
+  } catch (err) { $('skumap-msg').textContent = err.message; }
+}
+
 // ---- Access ------------------------------------------------------------------------
 // Admins (functions/api/users.js). Owners come from the code and can't be removed.
 function renderAccess() {
@@ -646,7 +744,9 @@ async function download(key) {
     'att-margin': () => group('margin'),
     'att-refunds': () => group('refunds'),
     'att-hidden': () => ['Hidden', [['Hidden', hiddenSheet(att().hidden, boxName)]], false],
-    uploads: () => ['Uploads', [['Uploads', uploadsSheet(D?.uploads || [])], ['Statements', statementsSheet(D?.statements || {})]], false],
+    uploads: () => ['Uploads', [['Uploads', uploadsSheet(D?.uploads || [])], ['Statements', statementsSheet(D?.statements || {})], ['Shopify uploads', shopUploadsSheet(state.shopify?.index?.uploads || [])]], false],
+    skumap: () => ['Box matches', [['Box matches', [['Shopify box', 'Shopify SKU', 'Sold', 'Net sales', 'TikTok box', 'TikTok SKU', 'Checked'],
+      ...shopBoxes().map((b) => { const t = state.skumap.values[b.sku]; return [b.title, b.sku, b.n, gbp(b.net), t ? boxName(t) : '', t || '', b.sku in state.skumap.values ? 'Yes' : 'No']; })]]], false],
   };
   const [title, sheets, dated = true] = sets[key]();
   const period = from || to ? `${from || 'start'} to ${to || 'latest'}` : 'all time';
@@ -667,11 +767,14 @@ function showTab() {
 
 async function load() {
   state = await api('/api/me');
-  state.data = assemble(state.index, state.batches);
-  state.spans = saleDates(state.data);
-  const st = Object.values(state.data?.statements || {}).map((s) => s.date).sort();
+  // TikTok's figures, with Shopify's joined in (Shopify boxes matched to TikTok ones count as one box).
+  state.full = withShopify(assemble(state.index, state.batches), state.shopify, state.skumap.values);
+  const st = Object.values(state.full?.statements || {}).map((s) => s.date).sort();
+  const sm = Object.keys(state.shopify?.months || {}).sort();
   $('who').textContent = `${state.email}${state.admin ? ' · admin' : ''}`;
-  $('coverage').textContent = st.length ? `TikTok statements loaded up to ${dmy(st[st.length - 1])}${state.data.uploaded_at ? ` · last updated ${new Date(state.data.uploaded_at).toLocaleDateString('en-GB')}` : ''}` : '';
+  $('coverage').textContent = [st.length ? `TikTok statements loaded up to ${dmy(st[st.length - 1])}` : '', sm.length ? `Shopify up to ${monthLong(sm.at(-1))}` : '',
+    state.full?.uploaded_at ? `last updated ${new Date(state.full.uploaded_at).toLocaleDateString('en-GB')}` : ''].filter(Boolean).join(' · ');
+  $('channel-pick').hidden = !sm.length;
   $('tabs').hidden = false;
   showTab();
   render();
@@ -694,7 +797,11 @@ async function start() {
     return;
   }
   addEventListener('hashchange', showTab);
-  for (const id of ['period', 'from', 'to']) $(id).addEventListener('change', render);
+  for (const id of ['period', 'from', 'to', 'channel']) $(id).addEventListener('change', render);
+  $('shop-file').addEventListener('change', () => pickShopify().catch((err) => setStatus(err.message, true)));
+  $('shop-publish').addEventListener('click', publishShopify);
+  $('skumap-save').addEventListener('click', saveSkumap);
+  sortable('shop-months');
   $('q').addEventListener('input', () => renderBoxes(summary(state.data, state.costs.values, ...range())));
   $('costs').addEventListener('click', (e) => {
     const th = e.target.closest('th[data-k]');

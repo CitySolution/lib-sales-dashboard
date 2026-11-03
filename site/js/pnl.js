@@ -114,11 +114,12 @@ export function costAt(entries, d) {
 const blank = () => ({ u: 0, r: 0, f: 0, n: 0, gs: 0, sd: 0, sdr: 0, revInc: 0, rev: 0, vat: 0, fees: 0, feeLines: {}, other: 0, otherLines: {}, cogs: 0, cogsLines: {}, gross: 0, marketing: 0, net: 0, settlement: 0, uncosted: 0 });
 
 // The FBT warehouse fee per box sold, per month: { 'YYYY-MM': £ per box } (negative).
-// Months with fees but no boxes sold keep their fee at shop level.
+// Months with fees but no boxes sold keep their fee at shop level. It's TikTok's
+// storage charge, so only TikTok's boxes share it.
 export function warehouseRates(data) {
   const fee = {}, units = {};
   for (const r of data?.adj || []) if (r.t === WAREHOUSE) fee[r.d.slice(0, 7)] = (fee[r.d.slice(0, 7)] || 0) + r.a;
-  for (const r of data?.daily || []) if (r.u) units[r.d.slice(0, 7)] = (units[r.d.slice(0, 7)] || 0) + r.u;
+  for (const r of data?.daily || []) if (r.u && r.ch !== 'shopify') units[r.d.slice(0, 7)] = (units[r.d.slice(0, 7)] || 0) + r.u;
   return Object.fromEntries(Object.entries(fee).filter(([m]) => units[m]).map(([m, f]) => [m, f / units[m]]));
 }
 
@@ -131,7 +132,7 @@ function add(t, row, costs, rates) {
   for (const k of FEE_KEYS) if (row[k]) { fees += row[k]; t.feeLines[k] = (t.feeLines[k] || 0) + row[k]; }
   let other = 0;
   for (const [k, v] of Object.entries(row.x || {})) { other += v; t.otherLines[k] = (t.otherLines[k] || 0) + v; }
-  const wh = (rates?.[row.d.slice(0, 7)] || 0) * (row.u || 0);
+  const wh = row.ch === 'shopify' ? 0 : (rates?.[row.d.slice(0, 7)] || 0) * (row.u || 0);
   if (wh) { other += wh; t.otherLines[WAREHOUSE] = (t.otherLines[WAREHOUSE] || 0) + wh; }
   const c = costAt(costs, row.d);
   let cogs = 0, marketing = 0;
@@ -156,13 +157,21 @@ export const prices = (t) => ({
   list: per(t.gs, t.u), disc: per(-t.sd, t.u), pct: per(-t.sd, t.gs), paid: per(t.gs + t.sd, t.u), given: -(t.sd + t.sdr),
 });
 
+// The figures for one sales channel ('tiktok' / 'shopify'), or all of them. Statement-
+// level items (adj) are TikTok's.
+export function channel(data, ch) {
+  if (!data || !ch || ch === 'all') return data;
+  return { ...data, daily: data.daily.filter((r) => (r.ch || 'tiktok') === ch), adj: ch === 'tiktok' ? data.adj : [] };
+}
+
 export const inRange = (d, from, to) => (!from || d >= from) && (!to || d <= to);
 
 // Each box's first and last sale (order date of a day with units sold, not refunds).
+// Shopify's monthly figures (`m`) have no sale dates, so they're left out.
 export function saleDates(data) {
   const out = new Map();
   for (const r of data?.daily || []) {
-    if (!r.u) continue;
+    if (!r.u || r.m) continue;
     const t = out.get(r.sku);
     if (!t) out.set(r.sku, { first: r.d, last: r.d });
     else { if (r.d < t.first) t.first = r.d; if (r.d > t.last) t.last = r.d; }

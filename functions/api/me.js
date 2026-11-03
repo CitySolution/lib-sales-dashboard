@@ -12,16 +12,19 @@ export async function onRequestGet({ request, env }) {
   try {
     const who = await identify(request, env);
     const kv = env.LIB_DATA;
-    const [indexRaw, costsRaw, dismissedRaw, targetsRaw] = await Promise.all([kv.get('index'), kv.get('costs'), kv.get('dismissed'), kv.get('targets')]);
+    const [indexRaw, costsRaw, dismissedRaw, targetsRaw, shopRaw, mapRaw] = await Promise.all([kv.get('index'), kv.get('costs'), kv.get('dismissed'), kv.get('targets'), kv.get('shopify'), kv.get('skumap')]);
     const index = indexRaw ? JSON.parse(indexRaw) : null;
     const batches = index ? await Promise.all(index.batches.map((k) => kv.get(k))) : [];
+    // Shopify (functions/api/shopify.js): one stored value per month, passed through as stored.
+    const shopMonths = shopRaw ? Object.keys(JSON.parse(shopRaw).months) : [];
+    const shopRows = await Promise.all(shopMonths.map((m) => kv.get(`shopify:${m}`)));
     // Who's an admin, for the Access tab: admins only.
     const access = who.admin ? { owners: ownerList(), users: (await kv.get('users', 'json')) || { admins: {}, log: [] } } : {};
     const seed = who.admin
       ? { seed_pending: seedPending(index), seed_costs: seedCostsPending(costsRaw && JSON.parse(costsRaw)), seed_rebuild: seedRebuild(index) }
       : { seed_pending: 0, seed_costs: 0, seed_rebuild: false };
     const head = JSON.stringify({ ...who, ...seed, ...access });
-    const body = `${head.slice(0, -1)},"costs":${costsRaw || '{"values":{},"log":[]}'},"dismissed":${dismissedRaw || '{"values":{},"log":[]}'},"targets":${targetsRaw || '{"values":{},"log":[]}'},"index":${indexRaw || 'null'},"batches":[${batches.filter(Boolean).join(',')}]}`;
+    const body = `${head.slice(0, -1)},"costs":${costsRaw || '{"values":{},"log":[]}'},"dismissed":${dismissedRaw || '{"values":{},"log":[]}'},"targets":${targetsRaw || '{"values":{},"log":[]}'},"index":${indexRaw || 'null'},"batches":[${batches.filter(Boolean).join(',')}],"skumap":${mapRaw || '{"values":{},"log":[]}'},"shopify":{"index":${shopRaw || 'null'},"months":{${shopMonths.map((m, i) => (shopRows[i] ? `"${m}":${shopRows[i]}` : '')).filter(Boolean).join(',')}}}}`;
     return new Response(body, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
   } catch (err) {
     return fail(err);
