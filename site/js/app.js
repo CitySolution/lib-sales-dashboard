@@ -493,6 +493,17 @@ function renderCostEdit(sku) {
 }
 
 // ---- Uploads -----------------------------------------------------------------------
+// Upload entries (newest first) from one file sent in pieces, merged: same file and
+// person within 15 minutes. `add(merged, piece)` adds a piece's figures in; `ats` lists them all.
+function sameUpload(list, add) {
+  const out = [];
+  for (const u of list) {
+    const g = out.at(-1);
+    if (g && g.name === u.name && g.by === u.by && Math.abs(Date.parse(g.at) - Date.parse(u.at)) < 15 * 6e4) { g.ats.push(u.at); add(g, u); } else out.push({ ...u, ats: [u.at] });
+  }
+  return out;
+}
+
 function renderUploads() {
   const d = state.data;
   $('upload').hidden = !state.admin;
@@ -509,8 +520,10 @@ function renderUploads() {
   $('loaded').innerHTML = st.length
     ? `<p>${int.format(st.length)} TikTok statements, settled ${dmy(dates[0])} to ${dmy(dates[dates.length - 1])}, totalling ${money(st.reduce((a, s) => a + s.settlement, 0), 2)} (matches TikTok's statements).</p>`
     : '<p class="muted">Nothing loaded yet.</p>';
-  const ups = (d?.uploads || []).slice().reverse();
-  $('uploads').innerHTML = ups.length ? `<thead><tr><th>File</th><th>When</th><th>Who</th><th>Orders</th><th>New statements</th><th>Already loaded</th><th>Settlement added</th></tr></thead><tbody>${ups.map((u) => `<tr><td>${esc(u.name)}</td><td data-v="${u.at}">${new Date(u.at).toLocaleString('en-GB')}</td><td>${esc(u.by)}</td><td data-v="${u.first || ''}">${dmy(u.first)} – ${dmy(u.last)}</td><td>${u.added}</td><td>${u.already}</td>${cell(u.settlement, 2)}</tr>`).join('')}</tbody>` : '';
+  // A file goes up a few statements at a time: its pieces are one upload, deleted together.
+  const ups = sameUpload((d?.uploads || []).slice().reverse(), (a, u) => { a.added += u.added; a.already += u.already; a.settlement += u.settlement; a.first = [a.first, u.first].sort()[0]; a.last = [a.last, u.last].sort().at(-1); });
+  const del = (u) => (state.admin ? `<td><button class="btn ghost xl" data-del-tiktok="${u.ats.join(',')}" data-what="${esc(u.name)}" data-n="${u.added}" data-net="${u.settlement}">Delete</button></td>` : '');
+  $('uploads').innerHTML = ups.length ? `<thead><tr><th>File</th><th>When</th><th>Who</th><th>Orders</th><th>New statements</th><th>Already loaded</th><th>Settlement added</th>${state.admin ? '<th></th>' : ''}</tr></thead><tbody>${ups.map((u) => `<tr><td>${esc(u.name)}</td><td data-v="${u.at}">${new Date(u.at).toLocaleString('en-GB')}</td><td>${esc(u.by)}</td><td data-v="${u.first || ''}">${dmy(u.first)} – ${dmy(u.last)}</td><td>${u.added}</td><td>${u.already}</td>${cell(u.settlement, 2)}${del(u)}</tr>`).join('')}</tbody>` : '';
   sortTable('uploads');
 }
 
@@ -664,7 +677,11 @@ const tiktokBoxes = () => {
 function renderShopify() {
   const idx = state.shopify?.index, ms = Object.keys(idx?.months || {}).sort();
   $('shop-loaded').innerHTML = ms.length ? `<h3>Shopify</h3><p>${ms.length} month${ms.length > 1 ? 's' : ''} loaded, ${monthLong(ms[0])} to ${monthLong(ms.at(-1))}: net sales ${money(ms.reduce((a, m) => a + idx.months[m].net, 0), 2)} (ex VAT).</p>` : '';
-  $('shop-months').innerHTML = ms.length ? `<thead><tr><th>Month</th><th>Figures</th><th>Box rows</th><th>Net sales</th><th>File</th><th>Uploaded</th><th>By</th></tr></thead><tbody>${ms.slice().reverse().map((m) => { const x = idx.months[m]; return `<tr><td data-v="${m}">${monthLong(m)}</td><td>${x.monthly ? 'Monthly' : 'Daily'}</td><td>${x.rows}</td>${cell(x.net, 2)}<td>${esc(x.file)}</td><td data-v="${x.at}">${new Date(x.at).toLocaleString('en-GB')}</td><td>${esc(x.by)}</td></tr>`; }).join('')}</tbody>` : '';
+  // One row per upload: the months it holds now (a later upload of a month replaces it).
+  const files = sameUpload(ms.map((m) => ({ ...idx.months[m], name: idx.months[m].file, m })).sort((a, b) => b.at.localeCompare(a.at)),
+    (a, u) => { a.net += u.net; });
+  const span = (f) => { const all = ms.filter((m) => idx.months[m].file === f.name && f.ats.includes(idx.months[m].at)); return { all, text: all.length > 1 ? `${monthLong(all[0])} – ${monthLong(all.at(-1))}` : monthLong(all[0]) }; };
+  $('shop-months').innerHTML = files.length ? `<thead><tr><th>File</th><th>Months</th><th>Figures</th><th>Net sales</th><th>Uploaded</th><th>By</th>${state.admin ? '<th></th>' : ''}</tr></thead><tbody>${files.map((f) => { const sp = span(f); return `<tr><td>${esc(f.name)}</td><td data-v="${sp.all[0]}">${sp.text}</td><td>${f.monthly ? 'Monthly' : 'Daily'}</td>${cell(f.net, 2)}<td data-v="${f.at}">${new Date(f.at).toLocaleString('en-GB')}</td><td>${esc(f.by)}</td>${state.admin ? `<td><button class="btn ghost xl" data-del-shop="${sp.all.join(',')}" data-what="${esc(f.name)}" data-months="${esc(sp.text)}" data-net="${f.net}">Delete</button></td>` : ''}</tr>`; }).join('')}</tbody>` : '';
   const boxes = shopBoxes(), saved = state.skumap.values;
   if (!boxes.length) {
     $('skumap-help').textContent = 'Once Shopify figures are added (above), each Shopify box in them is listed here to match to its TikTok box.';
@@ -804,6 +821,22 @@ async function start() {
   $('shop-file').addEventListener('change', () => pickShopify().catch((err) => setStatus(err.message, true)));
   $('shop-publish').addEventListener('click', publishShopify);
   $('skumap-save').addEventListener('click', saveSkumap);
+  // Deleting an upload (functions/api/delete.js).
+  $('v-uploads').addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-del-tiktok]'), s = e.target.closest('[data-del-shop]');
+    if (!t && !s) return;
+    const b = t || s;
+    const ask = t
+      ? `Delete the upload of ${b.dataset.what}?\n\nIts ${b.dataset.n} TikTok statements (${money(+b.dataset.net, 2)}) come out of every figure. You can upload the file again afterwards.`
+      : `Delete the Shopify figures from ${b.dataset.what}?\n\n${b.dataset.months} (net sales ${money(+b.dataset.net, 2)}) come out of every figure. Box matches and costs are kept.`;
+    if (!confirm(ask)) return;
+    b.disabled = true;
+    try {
+      const r = await api('/api/delete', t ? { tiktok: b.dataset.delTiktok.split(',') } : { shopify: b.dataset.delShop.split(',') });
+      await load();
+      setStatus(t ? `Deleted: ${r.statements} TikTok statements (${money(r.settlement, 2)}) taken out.` : `Deleted: Shopify figures for ${r.months.map(monthLong).join(', ')} taken out.`);
+    } catch (err) { setStatus(err.message, true); b.disabled = false; }
+  });
   sortable('shop-months');
   $('q').addEventListener('input', () => renderBoxes(summary(state.data, state.costs.values, ...range())));
   $('costs').addEventListener('click', (e) => {
