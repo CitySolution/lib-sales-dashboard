@@ -1,5 +1,5 @@
 // The dashboard page. All figures come from /api/me; the maths is in pnl.js.
-import { summary, byMonth, assemble, saleDates, inRange, prices, channel, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
+import { summary, byBox, byMonth, assemble, saleDates, inRange, prices, channel, COST_LINES, MARKETING, COST_KEYS, costAt } from './pnl.js';
 import { MONEY, readWorkbook, parseOrderDetails, onlyNew } from './tiktok.js';
 import { attention, withoutHidden, count as attCount, LIMITS, GROUPS } from './checks.js';
 import { METRICS, achieved, covered, vsTargets } from './targets.js';
@@ -13,7 +13,7 @@ const gbp2 = new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP'
 const int = new Intl.NumberFormat('en-GB');
 const money = (v, dp = 0) => { const s = (dp ? gbp2 : gbp0).format(Math.abs(v)); return v < -0.004 ? `−${s}` : s; };
 const cell = (v, dp = 0) => `<td${v < -0.004 ? ' class="neg"' : ''}>${money(v, dp)}</td>`;
-const pct = (v) => (Number.isFinite(v) ? `${(v * 100).toFixed(1)}%` : '–');
+const pct = (v) => (Number.isFinite(v) ? `${(Math.abs(v) < 0.0005 ? 0 : v * 100).toFixed(1)}%` : '–');
 const rate = (v) => (Number.isFinite(v) ? `${+(v * 100).toFixed(2)}%` : '–'); // a cost rate as entered: 15%, 5.35%
 const ratio = (a, b) => (b ? a / b : NaN);
 const dmy = (d) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '');
@@ -334,7 +334,20 @@ function renderBox(sku, s, from, to) {
   const c = costAt(state.costs.values[sku], to || '9999-12-31');
   const unit = (k) => (c ? (COST_LINES.find((x) => x.k === k)?.pct ? rate(c[k]) : money(c[k] || 0, 2)) : '');
   const fees = Object.entries(b.feeLines).filter(([, v]) => Math.abs(v) >= 0.005).sort(([, a], [, b2]) => a - b2);
-  const row = (label, v, note = '') => `<tr><td>${label}</td>${cell(v, 2)}<td class="muted">${note}</td></tr>`;
+  // A column per channel the box sold on (for the channel picked), a total when there's
+  // more than one, then each line as a % of the box's total net revenue.
+  const view = $('channel').value;
+  const chans = (view === 'all' ? ['tiktok', 'shopify'] : [view]).map((ch) => [ch, byBox(channel(state.full, ch), state.costs.values, from, to).get(sku)]).filter(([, t]) => t);
+  const cols = chans.length > 1 ? [...chans, ['total', b]] : [[chans[0]?.[0] || 'total', b]];
+  const N = cols.length + 3;
+  const vals = (f) => cols.map(([, t]) => cell(f(t) || 0, 2)).join('');
+  const share = (f) => `<td class="share">${pct(ratio(f(b) || 0, b.rev))}</td>`;
+  const row = (label, f, note = '') => `<tr><td>${label}</td>${vals(f)}${share(f)}<td class="muted">${note}</td></tr>`;
+  const sum = (label, f, cls = 'sum') => `<tr class="${cls}"><td>${label}</td>${vals(f)}${share(f)}<td></td></tr>`;
+  const head = (label) => `<tr class="head"><td colspan="${N}">${label}</td></tr>`;
+  const none = `<tr><td class="muted" colspan="${N}">None</td></tr>`;
+  const margin = (label, f) => `<tr class="pct"><td>${label}</td>${cols.map(([, t]) => { const v = ratio(f(t), t.rev); return `<td${v < 0 ? ' class="neg"' : ''}>${pct(v)}</td>`; }).join('')}<td></td><td></td></tr>`;
+  const COL = { tiktok: 'TikTok', shopify: 'Shopify', total: 'Total' };
   el.innerHTML = `
     <div class="ctrl"><div><p class="eyebrow">SKU ${sku}</p><h2>${esc(boxName(sku))}</h2></div><div><button class="btn ghost xl" data-xlsx="box">Excel</button> <button class="btn ghost" id="box-close">Close</button></div></div>
     ${others.length ? `<p class="muted small">Also sold as:</p><ul class="names muted small">${others.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}
@@ -345,28 +358,28 @@ function renderBox(sku, s, from, to) {
       ${tile('Average price (ex VAT)', Number.isFinite(ratio(b.rev, b.n)) ? money(ratio(b.rev, b.n), 2) : '–', 'net revenue per box')}
       ${tile('Profit per box', Number.isFinite(profitPer(b)) ? money(profitPer(b), 2) : '–', b.f ? `plus ${int.format(b.f)} free gift units` : '')}
     </div>
-    <div class="grid2">
-      <div class="tablewrap"><table class="t pl"><thead><tr><th>Line</th><th>£</th><th>Per unit</th></tr></thead><tbody>
-        <tr class="head"><td colspan="3">Revenue</td></tr>
-        ${row('Customer payments incl. VAT', b.revInc)}
-        ${row('VAT (÷ 6)', -b.vat)}
-        <tr class="sum"><td>Net revenue (ex VAT)</td>${cell(b.rev, 2)}<td></td></tr>
-        <tr class="head"><td colspan="3">TikTok fees</td></tr>
-        ${fees.map(([k, v]) => row(esc(FEE_LABEL(k)), v)).join('') || '<tr><td class="muted" colspan="3">None</td></tr>'}
-        <tr class="sum"><td>Total TikTok fees</td>${cell(b.fees, 2)}<td></td></tr>
-        <tr class="head"><td colspan="3">Other TikTok items</td></tr>
-        ${Object.entries(b.otherLines).filter(([, v]) => Math.abs(v) >= 0.005).map(([k, v]) => row(esc(k === 'FBT Warehouse service fee' ? 'FBT warehouse fee (share)' : k), v, k === 'FBT Warehouse service fee' && b.u ? `${money(v / b.u, 2)} per box sold` : '')).join('') || '<tr><td class="muted" colspan="3">None</td></tr>'}
-        <tr class="sum"><td>Total other TikTok items</td>${cell(b.other, 2)}<td></td></tr>
-        <tr class="head"><td colspan="3">Cost of goods</td></tr>
-        ${COST_LINES.map(({ k, label }) => row(label, b.cogsLines[k] || 0, unit(k))).join('')}
-        <tr class="sum"><td>Total COGS</td>${cell(b.cogs, 2)}<td></td></tr>
-        <tr class="sum"><td>Gross profit</td>${cell(b.gross, 2)}<td></td></tr>
-        ${pctRow('GP %', ratio(b.gross, b.rev), '<td></td>')}
-        ${row(MARKETING.label, b.marketing, unit('marketing'))}
-        <tr class="total"><td>Net profit</td>${cell(b.net, 2)}<td></td></tr>
-        ${pctRow('Net profit %', ratio(b.net, b.rev), '<td></td>')}
+    <div class="boxpl">
+      <div class="tablewrap"><table class="t pl"><thead><tr><th>Line</th>${cols.map(([c]) => `<th>${COL[c]}</th>`).join('')}<th>% of revenue</th><th>Per unit</th></tr></thead><tbody>
+        ${head('Revenue')}
+        ${row('Customer payments incl. VAT', (t) => t.revInc)}
+        ${row('VAT (÷ 6)', (t) => -t.vat)}
+        ${sum('Net revenue (ex VAT)', (t) => t.rev)}
+        ${head('TikTok fees')}
+        ${fees.map(([k]) => row(esc(FEE_LABEL(k)), (t) => t.feeLines[k])).join('') || none}
+        ${sum('Total TikTok fees', (t) => t.fees)}
+        ${head('Other TikTok items')}
+        ${Object.entries(b.otherLines).filter(([, v]) => Math.abs(v) >= 0.005).map(([k, v]) => row(esc(k === 'FBT Warehouse service fee' ? 'FBT warehouse fee (share)' : k), (t) => t.otherLines[k], k === 'FBT Warehouse service fee' && b.u ? `${money(v / b.u, 2)} per box sold` : '')).join('') || none}
+        ${sum('Total other TikTok items', (t) => t.other)}
+        ${head('Cost of goods')}
+        ${COST_LINES.map(({ k, label }) => row(label, (t) => t.cogsLines[k], unit(k))).join('')}
+        ${sum('Total COGS', (t) => t.cogs)}
+        ${sum('Gross profit', (t) => t.gross)}
+        ${margin('GP %', (t) => t.gross)}
+        ${row(MARKETING.label, (t) => t.marketing, unit('marketing'))}
+        ${sum('Net profit', (t) => t.net, 'total')}
+        ${margin('Net profit %', (t) => t.net)}
       </tbody></table>
-      <p class="muted small">Per-unit costs shown are those applying at the end of the period; each sale is costed at the costs applying on its order date.</p></div>
+      <p class="muted small">% of revenue is each line as a share of the box's total net revenue (ex VAT). Per-unit costs shown are those applying at the end of the period; each sale is costed at the costs applying on its order date.</p></div>
       <div><h3>Month by month</h3><div class="chart" id="box-chart"></div></div>
     </div>
     <h3>Price and discounts</h3>

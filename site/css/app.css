@@ -124,6 +124,8 @@ select.skumap { display: block; width: 100%; max-width: 30em; margin-top: 6px; }
 .sortable th[aria-sort=ascending]::after { content: " ↑"; }
 .sortable th[aria-sort=descending]::after { content: " ↓"; }
 .pl td:first-child { min-width: 0; }
+.pl td.share { color: var(--muted); }
+.boxpl > div + div { margin-top: 18px; } /* box detail: the P&L full width, its chart below */
 
 .legend { display: flex; gap: 16px; font-size: 13px; color: var(--muted); }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
